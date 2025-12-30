@@ -1,14 +1,15 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "benchmarks",
     platforms: [
-        .macOS(.v10_15)
+        .macOS(.v26)
     ],
     dependencies: [
         .package(path: "../"),
-        .package(url: "https://github.com/ordo-one/package-benchmark.git", from: "1.29.0"),
+        // .package(url: "https://github.com/ordo-one/package-benchmark.git", from: "1.29.0"),
+        .package(url: "https://github.com/ptoffy/package-benchmark", branch: "debug-mode-benchmarks")
     ],
     targets: [
         .executableTarget(

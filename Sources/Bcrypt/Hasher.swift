@@ -73,7 +73,11 @@ extension Bcrypt {
             throw BcryptError.invalidCost
         }
 
-        let (p, s) = EksBlowfish.setup(password: password, salt: cSalt, cost: cost)
+        var (p, s) = EksBlowfish.setup(password: password, salt: cSalt, cost: cost)
+        // these aren't actually being mutated but having them as Span instead would require
+        // us to have two separate encipher methods
+        let pSpan = p.mutableSpan
+        let sSpan = s.mutableSpan
 
         var cData = [UInt32](repeating: 0, count: Self.words)
 
@@ -92,7 +96,7 @@ extension Bcrypt {
             while j < Self.words / 2 {
                 xl = cData[j &* 2]
                 xr = cData[j &* 2 &+ 1]
-                EksBlowfish.encipher(xl: &xl, xr: &xr, p: p, s: s)
+                EksBlowfish.encipher(xl: &xl, xr: &xr, p: pSpan, s: sSpan)
                 cData[j &* 2] = xl
                 cData[j &* 2 &+ 1] = xr
                 j &+= 1

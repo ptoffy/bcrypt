@@ -3,7 +3,7 @@
 /// This work is based on
 /// 1. Applied Cryptography, Second Edition by Bruce Schneier, section 14 and the corresponding code in Part V.
 /// 2. The OpenBSD implementation of bcrypt at https://github.com/openbsd/src/blob/master/lib/libc/crypt/bcrypt.c.
-///   The function names and variable names are kept the same as in the OpenBSD implementation.
+///    The function names and variable names are kept the same as in the OpenBSD implementation.
 @usableFromInline enum EksBlowfish {
     @usableFromInline static let N = 16  // Cipher Rounds
 
@@ -17,13 +17,16 @@
 
         var (p, s) = (Self.initialP, Self.initialS)
 
-        expandState(password: password, salt: salt, p: &p, s: &s)
+        var pSpan = p.mutableSpan
+        var sSpan = s.mutableSpan
+
+        expandState(password: password, salt: salt, p: &pSpan, s: &sSpan)
 
         var i = 1 &<< cost
 
         while i > 0 {
-            expand0State(key: password, p: &p, s: &s)
-            expand0State(key: salt, p: &p, s: &s)
+            expand0State(key: password, p: &pSpan, s: &sSpan)
+            expand0State(key: salt, p: &pSpan, s: &sSpan)
             i &-= 1
         }
 
@@ -48,7 +51,12 @@
     }
 
     @usableFromInline
-    static func expand0State(key: [UInt8], p: inout [UInt32], s: inout [UInt32]) {
+    @_lifetime(&p, &s)
+    static func expand0State(
+        key: [UInt8],
+        p: inout MutableSpan<UInt32>,
+        s: inout MutableSpan<UInt32>
+    ) {
         var j = 0
         var i = 0
         while i < Self.N &+ 2 {
@@ -84,11 +92,12 @@
     }
 
     @usableFromInline
+    @_lifetime(&p, &s)
     static func expandState(
         password: [UInt8],
         salt: [UInt8],
-        p: inout [UInt32],
-        s: inout [UInt32]
+        p: inout MutableSpan<UInt32>,
+        s: inout MutableSpan<UInt32>
     ) {
         var j = 0
         var i = 0
@@ -130,32 +139,32 @@
 
     @usableFromInline
     @inline(__always)
-    static func encipher(xl: inout UInt32, xr: inout UInt32, p: UnsafePointer<UInt32>, s: UnsafePointer<UInt32>) {
+    static func encipher(xl: inout UInt32, xr: inout UInt32, p: borrowing MutableSpan<UInt32>, s: borrowing MutableSpan<UInt32>) {
         var Xl = xl
         var Xr = xr
 
-        Xl ^= p[0]
+        Xl ^= p[unchecked: 0]
 
         var i = 1
         while i <= 16 {
             // F(Xr)
-            let a1 = s[Int(truncatingIfNeeded: (Xl &>> 24) & 0xff)]
-            let b1 = s[0x100 &+ Int(truncatingIfNeeded: (Xl &>> 16) & 0xff)]
-            let c1 = s[0x200 &+ Int(truncatingIfNeeded: (Xl &>> 8) & 0xff)]
-            let d1 = s[0x300 &+ Int(truncatingIfNeeded: Xl & 0xff)]
-            Xr ^= ((a1 &+ b1) ^ c1 &+ d1) ^ p[i]
+            let a1 = s[unchecked: Int(truncatingIfNeeded: (Xl &>> 24) & 0xff)]
+            let b1 = s[unchecked: 0x100 &+ Int(truncatingIfNeeded: (Xl &>> 16) & 0xff)]
+            let c1 = s[unchecked: 0x200 &+ Int(truncatingIfNeeded: (Xl &>> 8) & 0xff)]
+            let d1 = s[unchecked: 0x300 &+ Int(truncatingIfNeeded: Xl & 0xff)]
+            Xr ^= ((a1 &+ b1) ^ c1 &+ d1) ^ p[unchecked: i]
 
             // F(Xl)
-            let a2 = s[Int(truncatingIfNeeded: (Xr &>> 24) & 0xff)]
-            let b2 = s[0x100 &+ Int(truncatingIfNeeded: (Xr &>> 16) & 0xff)]
-            let c2 = s[0x200 &+ Int(truncatingIfNeeded: (Xr &>> 8) & 0xff)]
-            let d2 = s[0x300 &+ Int(truncatingIfNeeded: Xr & 0xff)]
-            Xl ^= ((a2 &+ b2) ^ c2 &+ d2) ^ p[i &+ 1]
+            let a2 = s[unchecked: Int(truncatingIfNeeded: (Xr &>> 24) & 0xff)]
+            let b2 = s[unchecked: 0x100 &+ Int(truncatingIfNeeded: (Xr &>> 16) & 0xff)]
+            let c2 = s[unchecked: 0x200 &+ Int(truncatingIfNeeded: (Xr &>> 8) & 0xff)]
+            let d2 = s[unchecked: 0x300 &+ Int(truncatingIfNeeded: Xr & 0xff)]
+            Xl ^= ((a2 &+ b2) ^ c2 &+ d2) ^ p[unchecked: i &+ 1]
 
             i &+= 2
         }
 
-        xl = Xr ^ p[17]
+        xl = Xr ^ p[unchecked: 17]
         xr = Xl
     }
 }

@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:noble
     steps:
-      - name: Install curl
-        run: apt-get update -yq && apt-get install -y curl
+      - name: Install curl & node
+        run: apt-get update -yq && apt-get install -y curl nodejs
       - name: Checkout
         uses: actions/checkout@v4
       - name: Lint
@@ -20,7 +20,3 @@ jobs:
         run: swift build
       - name: Test
         run: swift test --enable-code-coverage
-      - name: Generate Coverage Report
-        uses: vapor/swift-codecov-action@v0.3
-        with:
-          codecov_token: ${{ secrets.CODECOV_TOKEN }}

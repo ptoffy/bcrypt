@@ -8,7 +8,7 @@ on:
     branches: [main]
 
 env:
-  CHECK_NAME: "benchmark / benchmark-vs-main"
+  CHECK_NAME: "benchmark / benchmark-vs-main (debug)"
 
 jobs:
   benchmark-vs-thresholds:
@@ -32,20 +32,20 @@ jobs:
 
       - name: Run benchmarks for PR
         run: |
-          swift package -c release --disable-sandbox \
+          swift package --disable-sandbox \
             --package-path Benchmarks \
             --allow-writing-to-directory .benchmarkBaselines/ \
-            benchmark baseline update pull_request --no-progress --quiet
+            benchmark baseline update pull_request --no-progress --quiet --debug-mode
 
       - name: Run benchmarks for main
         if: ${{ github.event_name == 'pull_request' }}
         run: |
           git stash
           git checkout main
-          swift package -c release --disable-sandbox \
+          swift package --disable-sandbox \
             --package-path Benchmarks \
             --allow-writing-to-directory .benchmarkBaselines/ \
-            benchmark baseline update main --no-progress --quiet
+            benchmark baseline update main --no-progress --quiet --debug-mode
 
       - name: Compare benchmarks
         id: comparison
@@ -53,10 +53,10 @@ jobs:
           TIMESTAMP="$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
           echo "## Benchmark check running at ${TIMESTAMP}" | tee -a comparison.md
 
-          swift package -c release --disable-sandbox \
+          swift package --disable-sandbox \
             --package-path Benchmarks \
             benchmark baseline read pull_request \
-            --format markdown \
+            --format markdown --debug-mode \
             | tee -a benchmark.md
 
           # Disable 'set -e' to prevent the script from exiting on non-zero exit codes
@@ -78,12 +78,12 @@ jobs:
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
             benchmark baseline compare main pull_request \
-            --no-progress --quiet \
+            --no-progress --quiet --debug-mode \
             --format markdown >> comparison.md
 
       - name: Construct result comment
         run: |
-          echo "## [Benchmark](${SERVER_URL}$/${{ github.repository }}/actions/runs/${{ github.run_id }}) Report" | tee -a comment.md
+          echo "## [Debug Benchmark](${SERVER_URL}$/${{ github.repository }}/actions/runs/${{ github.run_id }}) Report" | tee -a comment.md
           echo "" | tee -a comment.md
 
           EXIT_CODE='${{ steps.comparison.outputs.exit-status }}'
