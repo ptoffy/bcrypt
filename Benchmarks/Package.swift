@@ -16,7 +16,8 @@ let package = Package(
             dependencies: [
                 .product(name: "Benchmark", package: "package-benchmark"),
                 .product(name: "Bcrypt", package: "bcrypt"),
-            ]
+            ],
+            path: "Hashing"
         )
     ]
 )
