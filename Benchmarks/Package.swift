@@ -17,7 +17,10 @@ let package = Package(
                 .product(name: "Benchmark", package: "package-benchmark"),
                 .product(name: "Bcrypt", package: "bcrypt"),
             ],
-            path: "Hashing"
+            path: "Hashing",
+            plugins: [
+                .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
+            ]
         )
     ]
 )
