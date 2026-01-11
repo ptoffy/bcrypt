@@ -28,6 +28,10 @@ jobs:
         run: |
           apt update -q && apt install -yq libjemalloc-dev zstd curl jq
 
+      - name: Install node
+        run: |
+          apt-get install -y nodejs
+
       - name: Check out code
         uses: actions/checkout@v6
         with:
