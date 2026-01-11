@@ -7,8 +7,6 @@ let benchmarks = { @Sendable in
     )
 
     Benchmark("Hash 12") { benchmark in
-        blackHole {
-            _ = try Bcrypt.hash(password: "password", cost: 12)
-        }
+        _ = try Bcrypt.hash(password: "password", cost: 12)
     }
 }
