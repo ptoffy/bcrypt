@@ -10,7 +10,7 @@ let package = Package(
         .library(
             name: "Bcrypt",
             targets: ["Bcrypt"]
-        ),
+        )
     ],
     targets: [
         .target(
