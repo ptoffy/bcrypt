@@ -1,5 +1,5 @@
 {
-  "originHash" : "3667fd80c92ea3fd00c59f369dd26c7660c63283fa7fc1ad668c31bd235cda1c",
+  "originHash" : "6450b88fc53b834f986f1b8c684919916008ee280318bfdafb39c7eff32a61a1",
   "pins" : [
     {
       "identity" : "hdrhistogram-swift",
@@ -13,10 +13,10 @@
     {
       "identity" : "package-benchmark",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ptoffy/package-benchmark",
+      "location" : "https://github.com/ordo-one/package-benchmark.git",
       "state" : {
-        "branch" : "debug-mode-benchmarks",
-        "revision" : "922116108cd19d3eb6dc1bb1c6de360e560a7af4"
+        "revision" : "fc19213de49fd7cbd28b41ff7c8aaad7524adcfb",
+        "version" : "1.29.9"
       }
     },
     {

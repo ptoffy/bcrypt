@@ -35,7 +35,7 @@ jobs:
           swift package --disable-sandbox \
             --package-path Benchmarks \
             --allow-writing-to-directory .benchmarkBaselines/ \
-            benchmark baseline update pull_request --no-progress --quiet --benchmark-build-mode debug
+            benchmark baseline update pull_request --no-progress --quiet --benchmark-build-configuration debug
 
       - name: Run benchmarks for main
         if: ${{ github.event_name == 'pull_request' }}
@@ -45,7 +45,7 @@ jobs:
           swift package --disable-sandbox \
             --package-path Benchmarks \
             --allow-writing-to-directory .benchmarkBaselines/ \
-            benchmark baseline update main --no-progress --quiet --benchmark-build-mode debug
+            benchmark baseline update main --no-progress --quiet --benchmark-build-configuration debug
 
       - name: Compare benchmarks
         id: comparison
@@ -56,7 +56,7 @@ jobs:
           swift package --disable-sandbox \
             --package-path Benchmarks \
             benchmark baseline read pull_request \
-            --format markdown --benchmark-build-mode debug \
+            --format markdown --benchmark-build-configuration debug \
             | tee -a benchmark.md
 
           # Disable 'set -e' to prevent the script from exiting on non-zero exit codes
@@ -78,7 +78,7 @@ jobs:
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
             benchmark baseline compare main pull_request \
-            --no-progress --quiet --benchmark-build-mode debug \
+            --no-progress --quiet --benchmark-build-configuration debug \
             --format markdown >> comparison.md
 
       - name: Construct result comment
