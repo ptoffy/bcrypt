@@ -48,7 +48,16 @@ extension Bcrypt {
             throw BcryptError.invalidSaltLength
         }
 
-        let cSalt = Base64.decode(salt, count: Self.maxSalt)
+        let cSalt: [UInt8]
+        do {
+            cSalt = try Base64.decode(salt, count: Self.maxSalt)
+        } catch {
+            throw BcryptError.invalidSalt
+        }
+
+        guard cSalt.count == 16 else {
+            throw BcryptError.invalidSalt
+        }
 
         guard password.count > 0 else {
             throw BcryptError.emptyPassword

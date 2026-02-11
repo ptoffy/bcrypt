@@ -1,3 +1,7 @@
+enum Base64Error: Error {
+    case invalidCharacter
+}
+
 @usableFromInline
 struct Base64 {
     @usableFromInline
@@ -74,7 +78,7 @@ struct Base64 {
     }
 
     @usableFromInline
-    static func decode(_ s: [UInt8], count maxolen: Int) -> [UInt8] {
+    static func decode(_ s: [UInt8], count maxolen: Int) throws(Base64Error) -> [UInt8] {
         var off = 0
         var olen = 0
         var result = [UInt8](repeating: 0, count: maxolen)
@@ -91,7 +95,7 @@ struct Base64 {
             c2 = char64(of: s[off])
             off &+= 1
             if c1 == UInt8.max || c2 == UInt8.max {
-                break
+                throw .invalidCharacter
             }
 
             o = c1 &<< 2
@@ -106,7 +110,7 @@ struct Base64 {
             off &+= 1
 
             if c3 == UInt8.max {
-                break
+                throw .invalidCharacter
             }
 
             o = (c2 & 0x0f) &<< 4

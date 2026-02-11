@@ -49,7 +49,7 @@ extension Bcrypt {
     guard a.count == b.count else { return false }
     var areEqual: UInt8 = 0
     var i = a.count - 1
-    while i != 0 {
+    while i >= 0 {
         areEqual |= a[i] ^ b[i]
         i -= 1
     }
