@@ -30,7 +30,7 @@ jobs:
           toolchain: "6.4"
 
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

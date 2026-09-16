@@ -8,12 +8,18 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    container: swift:noble
+    timeout-minutes: 30
     steps:
       - name: Install curl & node
         run: apt-get update -yq && apt-get install -y curl nodejs
+
+      # TODO: Update with swift:6.4 image when available
+      - name: Install Swift
+        uses: vapor/swiftly-action@v0.2
+        with:
+          toolchain: "6.4"
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Lint
         run: swift-format lint --recursive --strict --parallel .
       - name: Build
