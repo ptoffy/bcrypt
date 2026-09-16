@@ -16,26 +16,17 @@ jobs:
   benchmark-vs-main-debug:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    container:
+      image: swiftlang/swift:nightly-6.4.x-noble
+      options: --privileged
 
     steps:
-      - name: Install jemalloc and jq
+      # Same flow as benchmark.yaml, but the benchmark targets (and the Bcrypt library) are built in debug.
+      # jemalloc is required by package-benchmark for the malloc metrics; zstd speeds up actions/cache.
+      - name: Install jemalloc, jq, curl and zstd
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -yq libjemalloc-dev jq
-
-      # The instructions metric uses perf_event_open on the benchmark process itself (user space only).
-      # Ubuntu ships kernel.perf_event_paranoid=4, which refuses all unprivileged perf use and makes
-      # the metric read as zero; 1 allows it (2 would also do, 1 leaves headroom for kernel counts).
-      - name: Allow perf counters for the instructions metric
-        run: |
-          sudo sysctl -w kernel.perf_event_paranoid=1
-          cat /proc/sys/kernel/perf_event_paranoid
-
-      # TODO: Update with swift:6.4 image when available
-      - name: Install Swift
-        uses: vapor/swiftly-action@v0.2
-        with:
-          toolchain: "6.4"
+          apt-get update -q
+          apt-get install -yq libjemalloc-dev jq curl zstd
 
       - name: Check out code
         uses: actions/checkout@v6
