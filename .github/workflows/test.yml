@@ -1,4 +1,4 @@
-name: Lint, Build & Test with Coverage
+name: ci
 on:
   push:
     branches: [main]

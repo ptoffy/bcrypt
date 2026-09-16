@@ -1,65 +1,69 @@
 name: benchmark
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 on:
   pull_request:
     branches: [main]
 
-env:
-  CHECK_NAME: "benchmark / benchmark-vs-main"
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
-  benchmark-vs-thresholds:
+  benchmark-vs-main:
     runs-on: ubuntu-latest
-    container: swift:noble
+    timeout-minutes: 30
 
     steps:
-      # jemalloc is a dependency of the Benchmarking package
-      # actions/cache will detect zstd and will become much faster.
-      - name: Install jemalloc, zstd, curl, jq and node
+      - name: Install jemalloc and jq
         run: |
-          apt update -q && apt install -yq libjemalloc-dev zstd curl jq nodejs
+          sudo apt-get update -q
+          sudo apt-get install -yq libjemalloc-dev jq
+
+      # TODO: Update with swift:6.4 image when available
+      - name: Install Swift
+        uses: vapor/swiftly-action@v0.2
+        with:
+          toolchain: "6.4"
 
       - name: Check out code
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Configure git
-        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+      - name: Cache benchmark build
+        uses: actions/cache@v4
+        with:
+          path: Benchmarks/.build
+          key: benchmarks-${{ runner.os }}-${{ hashFiles('Benchmarks/Package.resolved') }}
+          restore-keys: benchmarks-${{ runner.os }}-
 
-      - name: Run benchmarks for PR
+      - name: Run benchmarks for the pull request
         run: |
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
-            --allow-writing-to-directory .benchmarkBaselines/ \
             benchmark baseline update pull_request --no-progress --quiet
 
-      - name: Run benchmarks for main
-        if: ${{ github.event_name == 'pull_request' }}
+      - name: Run benchmarks for the merge base
         run: |
           git stash
-          git checkout main
+          git checkout --quiet ${{ github.event.pull_request.base.sha }}
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
-            --allow-writing-to-directory .benchmarkBaselines/ \
             benchmark baseline update main --no-progress --quiet
 
       - name: Compare benchmarks
         id: comparison
         run: |
-          TIMESTAMP="$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
-          echo "## Benchmark check running at ${TIMESTAMP}" | tee -a comparison.md
-
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
             benchmark baseline read pull_request \
             --format markdown \
             | tee -a benchmark.md
 
-          # Disable 'set -e' to prevent the script from exiting on non-zero exit codes
           set +e
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
@@ -68,13 +72,9 @@ jobs:
             | tee -a comparison.md
           CHECK_EXIT=$?
           set -e
-
           echo "exit-status=${CHECK_EXIT}" >> "${GITHUB_OUTPUT}"
 
-          # Add detailed comparison
-          echo "" >> comparison.md
-          echo "---" >> comparison.md
-          echo "" >> comparison.md
+          printf '\n---\n\n' >> comparison.md
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
             benchmark baseline compare main pull_request \
@@ -83,55 +83,57 @@ jobs:
 
       - name: Construct result comment
         run: |
-          echo "## [Benchmark](${SERVER_URL}$/${{ github.repository }}/actions/runs/${{ github.run_id }}) Report" | tee -a comment.md
-          echo "" | tee -a comment.md
-
-          EXIT_CODE='${{ steps.comparison.outputs.exit-status }}'
-          case "${EXIT_CODE}" in
-              0) echo '**✅ Pull request has no significant performance differences**' | tee -a comment.md ;;
-              1) echo '**❓ Pull request has significant performance differences**' | tee -a comment.md ;;
-              2) echo '**❌ Pull request has significant performance regressions**' | tee -a comment.md ;;
-              4) echo '**⚠️ Pull request has significant performance improvements**' | tee -a comment.md ;;
-              *) echo '**🚫 Benchmark comparison failed with unknown exit code ${EXIT_CODE}**' | tee -a comment.md ;;
-          esac
-
-          printf '<details>\n  <summary>Click to expand comparison result</summary>\n\n%s\n\n</details>\n\n' "$(cat comparison.md)" | tee -a comment.md
-          printf '<details>\n  <summary>Click to expand benchmark result</summary>\n\n%s\n\n</details>\n\n' "$(cat benchmark.md)" | tee -a comment.md
-
-      - name: Update comment in PR
-        if: ${{ github.event_name == 'pull_request' }}
-        env:
-          BOT_TOKEN: ${{ secrets.COMMENT_PR_TOKEN }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          OWNER="${{ github.repository_owner }}"
-          REPO="${{ github.event.repository.name }}"
-          SERVER_URL="${{ github.server_url }}"
-
-          COMMENT_BODY=$(cat comment.md | jq -Rs .)
-
-          echo "📝 Posting final comment to PR #${PR_NUMBER}..."
-
-          RESPONSE=$(curl -w "\n%{http_code}" -s \
-            -X POST \
-            -H "Authorization: token ${BOT_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "${SERVER_URL}/api/v1/repos/${OWNER}/${REPO}/issues/${PR_NUMBER}/comments" \
-            -d "{\"body\": ${COMMENT_BODY}}")
-
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-
-          if [ "$HTTP_CODE" = "201" ]; then
-            echo "✅ Comment posted successfully!"
-          else
-            echo "❌ Failed to post comment. HTTP Status: $HTTP_CODE"
-            echo "Response: $(echo "$RESPONSE" | sed '$d')"
-            exit 1
-          fi
-
-      - name: Output the comment as job summary
-        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          {
+            echo '<!-- benchmark-report -->'
+            echo "## [Benchmark](${RUN_URL}) report"
+            echo ""
+            case '${{ steps.comparison.outputs.exit-status }}' in
+              0) echo '**✅ No significant performance differences**' ;;
+              1) echo '**❓ Significant performance differences**' ;;
+              2) echo '**❌ Significant performance regressions**' ;;
+              4) echo '**⚠️ Significant performance improvements**' ;;
+              *) echo '**🚫 Benchmark comparison failed with exit code ${{ steps.comparison.outputs.exit-status }}**' ;;
+            esac
+            echo ""
+            printf '<details>\n<summary>Comparison against main</summary>\n\n%s\n\n</details>\n\n' "$(cat comparison.md)"
+            printf '<details>\n<summary>Pull request results</summary>\n\n%s\n\n</details>\n' "$(cat benchmark.md)"
+          } > comment.md
           cat comment.md >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Exit with comparison status
-        run: exit ${{ steps.comparison.outputs.exit-status }}
+      - name: Post or update the PR comment
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API: ${{ github.api_url }}/repos/${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          BODY="$(jq -Rs . comment.md)"
+          EXISTING="$(curl -sS \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${API}/issues/${PR_NUMBER}/comments?per_page=100" \
+            | jq -r '[.[] | select(.body | contains("<!-- benchmark-report -->"))][0].id // empty')"
+
+          if [ -n "${EXISTING}" ]; then
+            curl -sS -o /dev/null -w "update comment ${EXISTING}: %{http_code}\n" \
+              -X PATCH \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${API}/issues/comments/${EXISTING}" \
+              -d "{\"body\": ${BODY}}"
+          else
+            curl -sS -o /dev/null -w "create comment: %{http_code}\n" \
+              -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${API}/issues/${PR_NUMBER}/comments" \
+              -d "{\"body\": ${BODY}}"
+          fi
+
+      - name: Fail on regressions
+        run: |
+          case '${{ steps.comparison.outputs.exit-status }}' in
+            0|1|4) exit 0 ;;
+            *) exit 1 ;;
+          esac

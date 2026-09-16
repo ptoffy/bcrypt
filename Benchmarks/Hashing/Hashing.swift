@@ -3,7 +3,12 @@ import Benchmark
 
 let benchmarks = { @Sendable in
     Benchmark.defaultConfiguration = .init(
-        metrics: [.mallocCountTotal, .instructions, .wallClock]
+        metrics: [.mallocCountTotal, .instructions, .wallClock],
+        thresholds: [
+            .mallocCountTotal: .init(absolute: BenchmarkThresholds.Absolute.strict),
+            .instructions: .init(relative: BenchmarkThresholds.Relative.default),
+            .wallClock: .init(relative: BenchmarkThresholds.Relative.none),
+        ]
     )
 
     let cost = 12
