@@ -1,4 +1,4 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.4
 import PackageDescription
 
 let package = Package(
@@ -8,7 +8,6 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../"),
-        // .package(url: "https://github.com/ordo-one/package-benchmark.git", from: "1.29.0"),
         .package(url: "https://github.com/ordo-one/package-benchmark.git", from: "1.29.9"),
     ],
     targets: [
@@ -22,6 +21,17 @@ let package = Package(
             plugins: [
                 .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
             ]
-        )
+        ),
+        .executableTarget(
+            name: "Verifying",
+            dependencies: [
+                .product(name: "Benchmark", package: "package-benchmark"),
+                .product(name: "Bcrypt", package: "bcrypt"),
+            ],
+            path: "Verifying",
+            plugins: [
+                .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
+            ]
+        ),
     ]
 )

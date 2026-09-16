@@ -7,7 +7,7 @@ extension Bcrypt {
     /// - Returns: `true` if the password matches the hash, `false` otherwise.
     @inlinable
     public static func verify(password: String, against hash: String) throws(BcryptError) -> Bool {
-        try verify(password: Array(password.utf8), against: Array(hash.utf8))
+        try verify(password: password.utf8Span.span, against: hash.utf8Span.span)
     }
 
     /// Verifies a password against a hash.
@@ -18,6 +18,17 @@ extension Bcrypt {
     /// - Returns: `true` if the password matches the hash, `false` otherwise.
     @inlinable
     public static func verify(password: [UInt8], against hash: [UInt8]) throws(BcryptError) -> Bool {
+        try verify(password: password.span, against: hash.span)
+    }
+
+    /// Verifies a password against a hash.
+    /// - Parameters:
+    ///   - password: the password to verify.
+    ///   - hash: the hash to verify against.
+    /// - Throws: ``BcryptError``
+    /// - Returns: `true` if the password matches the hash, `false` otherwise.
+    @inlinable
+    public static func verify(password: Span<UInt8>, against hash: Span<UInt8>) throws(BcryptError) -> Bool {
         // $2a$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW
         // \__/\/ \____________________/\_____________________________/
         // Alg Cost      Salt                        Hash
@@ -26,7 +37,7 @@ extension Bcrypt {
             throw BcryptError.invalidHash
         }
 
-        guard let version = BcryptVersion(identifier: hash[0...3]) else {
+        guard let version = BcryptVersion(identifier: hash.extracting(0...3)) else {
             throw BcryptError.invalidVersion
         }
 
@@ -37,15 +48,15 @@ extension Bcrypt {
         }
         let cost = tens * 10 + ones
 
-        let salt = Array(hash[7...28])
+        let newHash = try InlineArray<60, UInt8> { outputSpan throws(BcryptError) in
+            try Bcrypt.hash(password: password, cost: cost, salt: hash.extracting(7..<29), version: version, into: &outputSpan)
+        }
 
-        let newHash = try Bcrypt.hash(password: password, cost: cost, salt: salt, version: version)
-
-        return constantTimeEquals(newHash, hash)
+        return constantTimeEquals(newHash.span, hash)
     }
 }
 
-@usableFromInline func constantTimeEquals(_ a: [UInt8], _ b: [UInt8]) -> Bool {
+@usableFromInline func constantTimeEquals(_ a: Span<UInt8>, _ b: Span<UInt8>) -> Bool {
     guard a.count == b.count else { return false }
     var areEqual: UInt8 = 0
     var i = a.count - 1

@@ -1,5 +1,9 @@
 extension Bcrypt {
-    @usableFromInline static let cipherText = Array("OrpheanBeholderScryDoubt".utf8)
+    /// "OrpheanBeholderScryDoubt" as six big-endian words; the block that bcrypt encrypts 64 times with the derived key.
+    @usableFromInline static let cipherText: InlineArray<6, UInt32> = [
+        0x4f72_7068, 0x6561_6e42, 0x6568_6f6c,
+        0x6465_7253, 0x6372_7944, 0x6f75_6274,
+    ]
     @usableFromInline static let maxSalt = 16
     @usableFromInline static let saltSpace = 22
     @usableFromInline static let words = 6
@@ -14,10 +18,7 @@ extension Bcrypt {
     /// - Returns: the hashed password.
     @inlinable
     public static func hash(password: String, cost: Int = 10, version: BcryptVersion = .v2b) throws(BcryptError) -> String {
-        String(
-            decoding: try hash(password: Array(password.utf8), cost: cost, salt: Self.generateRandomSalt(), version: version),
-            as: UTF8.self
-        )
+        String(decoding: try hash(password: password.utf8Span.span, cost: cost, version: version), as: UTF8.self)
     }
 
     /// Hashes a password using the bcrypt algorithm.
@@ -29,14 +30,27 @@ extension Bcrypt {
     /// - Returns: the hashed password.
     @inlinable
     public static func hash(password: [UInt8], cost: Int = 10, version: BcryptVersion = .v2b) throws(BcryptError) -> [UInt8] {
-        try hash(password: password, cost: cost, salt: Self.generateRandomSalt(), version: version)
+        try hash(password: password.span, cost: cost, version: version)
     }
 
     /// Hashes a password using the bcrypt algorithm.
     /// - Parameters:
     ///   - password: the password to hash.
     ///   - cost: number of rounds to apply the key derivation function, used as log2(cost). Must be between 4 and 31.
-    ///   - salt: the salt to use for the hash.
+    ///   - version: the version of the bcrypt algorithm to use. Defaults to `v2b`.
+    /// - Throws: ``BcryptError``
+    /// - Returns: the hashed password.
+    @inlinable
+    public static func hash(password: Span<UInt8>, cost: Int = 10, version: BcryptVersion = .v2b) throws(BcryptError) -> [UInt8] {
+        let salt = Self.generateRandomSalt()
+        return try hash(password: password, cost: cost, salt: salt.span, version: version)
+    }
+
+    /// Hashes a password using the bcrypt algorithm.
+    /// - Parameters:
+    ///   - password: the password to hash.
+    ///   - cost: number of rounds to apply the key derivation function, used as log2(cost). Must be between 4 and 31.
+    ///   - salt: the 22 character, base64 encoded salt to use for the hash.
     ///   - version: the version of the bcrypt algorithm to use. Defaults to `v2b`.
     /// - Throws: ``BcryptError``
     /// - Returns: the hashed password.
@@ -44,18 +58,54 @@ extension Bcrypt {
     public static func hash(
         password: [UInt8], cost: Int = 10, salt: [UInt8], version: BcryptVersion = .v2b
     ) throws(BcryptError) -> [UInt8] {
-        guard (salt.count * 3 / 4) - 1 < Self.maxSalt else {
+        try hash(password: password.span, cost: cost, salt: salt.span, version: version)
+    }
+
+    /// Hashes a password using the bcrypt algorithm.
+    /// - Parameters:
+    ///   - password: the password to hash.
+    ///   - cost: number of rounds to apply the key derivation function, used as log2(cost). Must be between 4 and 31.
+    ///   - salt: the 22 character, base64 encoded salt to use for the hash.
+    ///   - version: the version of the bcrypt algorithm to use. Defaults to `v2b`.
+    /// - Throws: ``BcryptError``
+    /// - Returns: the hashed password.
+    @inlinable
+    public static func hash(
+        password: Span<UInt8>, cost: Int = 10, salt: Span<UInt8>, version: BcryptVersion = .v2b
+    ) throws(BcryptError) -> [UInt8] {
+        try [UInt8](capacity: Self.hashSpace) { output throws(BcryptError) in
+            try hash(password: password, cost: cost, salt: salt, version: version, into: &output)
+        }
+    }
+
+    /// Hashes a password using the bcrypt algorithm, writing the 60 byte hash into `output`.
+    /// - Parameters:
+    ///   - password: the password to hash.
+    ///   - cost: number of rounds to apply the key derivation function, used as log2(cost). Must be between 4 and 31.
+    ///   - salt: the 22 character, base64 encoded salt to use for the hash.
+    ///   - version: the version of the bcrypt algorithm to use. Defaults to `v2b`.
+    ///   - output: receives the 60 bytes of the hash. Must have room for at least 60 more elements.
+    /// - Throws: ``BcryptError``
+    public static func hash(
+        password: Span<UInt8>,
+        cost: Int = 10,
+        salt: Span<UInt8>,
+        version: BcryptVersion = .v2b,
+        into output: inout OutputSpan<UInt8>
+    ) throws(BcryptError) {
+        guard salt.count == Self.saltSpace else {
             throw BcryptError.invalidSaltLength
         }
 
-        let cSalt: [UInt8]
+        let cSalt: InlineArray<16, UInt8>
         do {
-            cSalt = try Base64.decode(salt, count: Self.maxSalt)
+            cSalt = try InlineArray<16, UInt8>(initializingWith: { (output: inout OutputSpan<UInt8>) throws(Base64Error) in
+                try Base64.decode(salt, count: Self.maxSalt, into: &output)
+                guard output.count == Self.maxSalt else {
+                    throw .invalidLength
+                }
+            })
         } catch {
-            throw BcryptError.invalidSalt
-        }
-
-        guard cSalt.count == 16 else {
             throw BcryptError.invalidSalt
         }
 
@@ -63,17 +113,14 @@ extension Bcrypt {
             throw BcryptError.emptyPassword
         }
 
-        let password =
-            if password[password.endIndex &- 1] == 0 {
-                Array(password[password.startIndex..<password.endIndex - 1]) + [0]
-            } else {
-                password + [0]
-            }
+        // The key schedule streams a NUL terminator after the password itself (see `EksBlowfish.stream2word`).
+        // If the caller already supplied one, drop it so that it is not counted twice.
+        let key = password[password.count - 1] == 0 ? password.extracting(..<(password.count &- 1)) : password
 
         switch version {
         case .v2a: break
         case .v2b:
-            guard password.count <= 73 else {  // 72 + 1 because of the NULL terminator
+            guard key.count <= 72 else {
                 throw BcryptError.passwordTooLong
             }
         }
@@ -82,22 +129,15 @@ extension Bcrypt {
             throw BcryptError.invalidCost
         }
 
-        var (p, s) = EksBlowfish.setup(password: password, salt: cSalt, cost: cost)
+        var (p, s) = EksBlowfish.setup(password: key, salt: cSalt.span, cost: cost)
         // these aren't actually being mutated but having them as Span instead would require
         // us to have two separate encipher methods
         let pSpan = p.mutableSpan
         let sSpan = s.mutableSpan
 
-        var cData = [UInt32](repeating: 0, count: Self.words)
+        var cData = Self.cipherText
 
         var i = 0
-        var j = 0
-        while i < Self.words {
-            cData[i] = EksBlowfish.stream2word(data: Self.cipherText, j: &j)
-            i &+= 1
-        }
-
-        i = 0
         while i < 64 {
             var j = 0
             var xl: UInt32 = 0
@@ -113,58 +153,43 @@ extension Bcrypt {
             i &+= 1
         }
 
-        var cipherText = Self.cipherText
-        i = 0
-        while i < Self.words {
-            cipherText[4 &* i &+ 3] = UInt8(cData[i] & 0xff)
-            cipherText[4 &* i &+ 2] = UInt8((cData[i] &>> 8) & 0xff)
-            cipherText[4 &* i &+ 1] = UInt8((cData[i] &>> 16) & 0xff)
-            cipherText[4 &* i &+ 0] = UInt8((cData[i] &>> 24) & 0xff)
-            i &+= 1
+        // Big-endian bytes of cData; only the first 23 are part of the hash.
+        let cipherBytes = InlineArray<24, UInt8> { i in
+            UInt8(truncatingIfNeeded: cData[i / 4] &>> (24 &- 8 &* (i % 4)))
         }
 
-        var output = [UInt8]()
+        for index in version.identifier.indices {
+            output.append(version.identifier[index])
+        }
 
-        let cost: [UInt8] =
-            switch cost {
-            case 0...9:
-                [0x30, UInt8(cost + 0x30)]
-            default:
-                [UInt8(cost / 10 + 0x30), UInt8(cost % 10 + 0x30)]
-            }
+        switch cost {
+        case 0...9:
+            output.append(0x30)
+            output.append(UInt8(cost &+ 0x30))
+        default:
+            output.append(UInt8(cost / 10 + 0x30))
+            output.append(UInt8(cost % 10 + 0x30))
+        }
 
-        let prefix = version.identifier + cost + [36]
+        output.append(36)
 
-        output += prefix
-        output += salt
-        output += Base64.encode(cipherText, count: 4 * Self.words - 1)
+        for index in salt.indices {
+            output.append(salt[index])
+        }
 
-        return output
+        Base64.encode(cipherBytes.span, count: 4 * Self.words - 1, into: &output)
     }
 
     // $2a$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW
     // \__/\/ \____________________/\_____________________________/
     // Alg Cost      Salt                        Hash
     @usableFromInline
-    static func generateRandomSalt() -> [UInt8] {
-        var salt = [UInt8](repeating: 0, count: saltSpace)
-
-        var cSalt = [UInt8](repeating: 0, count: maxSalt)
-        var i = 0
-        while i < maxSalt {
-            cSalt[i] = UInt8.random(in: .min ... .max)
-            i &+= 1
+    static func generateRandomSalt() -> InlineArray<22, UInt8> {
+        let cSalt = InlineArray<16, UInt8> {
+            _ in UInt8.random(in: .min ... .max)
         }
-
-        let encodedSalt = Base64.encode(cSalt, count: Self.hashSpace)
-        i = 0
-        while i < encodedSalt.count {
-            if i < saltSpace {
-                salt[i] = encodedSalt[i]
-            }
-            i &+= 1
-        }
-
-        return salt
+        return InlineArray<22, UInt8>(initializingWith: { outputSpan in
+            Base64.encode(cSalt.span, count: Self.hashSpace, into: &outputSpan)
+        })
     }
 }

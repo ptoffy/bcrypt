@@ -1,4 +1,4 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.4
 import PackageDescription
 
 let package = Package(
@@ -9,22 +9,16 @@ let package = Package(
     products: [
         .library(
             name: "Bcrypt",
-            targets: ["Bcrypt"]
+            targets: ["Bcrypt"],
         )
     ],
     targets: [
         .target(
             name: "Bcrypt",
-            swiftSettings: settings
         ),
         .testTarget(
             name: "BcryptTests",
-            dependencies: ["Bcrypt"],
-            swiftSettings: settings
+            dependencies: ["Bcrypt"]
         ),
     ]
 )
-
-var settings: [SwiftSetting] {
-    [.enableExperimentalFeature("Lifetimes")]
-}

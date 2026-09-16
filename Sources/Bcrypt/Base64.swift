@@ -1,5 +1,7 @@
+@usableFromInline
 enum Base64Error: Error {
     case invalidCharacter
+    case invalidLength
 }
 
 @usableFromInline
@@ -31,46 +33,42 @@ struct Base64 {
     ]
 
     @usableFromInline
-    static func encode(_ bytes: [UInt8], count: Int) -> [UInt8] {
-        guard bytes.count > 0 || count > 0 else {
-            return []
-        }
+    static func encode(_ bytes: Span<UInt8>, count: Int, into output: inout OutputSpan<UInt8>) {
+        guard bytes.count > 0 || count > 0 else { return }
 
         let len = min(bytes.count, count)
 
         var offset: Int = 0
         var c1: UInt8
         var c2: UInt8
-        var result: [UInt8] = []
 
         while offset < len {
             c1 = bytes[offset] & 0xff
             offset &+= 1
-            result.append(encodingTable[Int(truncatingIfNeeded: (c1 &>> 2) & 0x3f)])
+            output.append(encodingTable[Int(truncatingIfNeeded: (c1 &>> 2) & 0x3f)])
+
             c1 = (c1 & 0x03) &<< 4
             if offset >= len {
-                result.append(encodingTable[Int(truncatingIfNeeded: c1 & 0x3f)])
+                output.append(encodingTable[Int(truncatingIfNeeded: c1 & 0x3f)])
                 break
             }
 
             c2 = bytes[offset] & 0xff
             offset &+= 1
             c1 |= (c2 &>> 4) & 0x0f
-            result.append(encodingTable[Int(truncatingIfNeeded: c1 & 0x3f)])
+            output.append(encodingTable[Int(truncatingIfNeeded: c1 & 0x3f)])
             c1 = (c2 & 0x0f) &<< 2
             if offset >= len {
-                result.append(encodingTable[Int(truncatingIfNeeded: c1 & 0x3f)])
+                output.append(encodingTable[Int(truncatingIfNeeded: c1 & 0x3f)])
                 break
             }
 
             c2 = bytes[offset] & 0xff
             offset &+= 1
             c1 |= (c2 &>> 6) & 0x03
-            result.append(encodingTable[Int(truncatingIfNeeded: c1 & 0x3f)])
-            result.append(encodingTable[Int(truncatingIfNeeded: c2 & 0x3f)])
+            output.append(encodingTable[Int(truncatingIfNeeded: c1 & 0x3f)])
+            output.append(encodingTable[Int(truncatingIfNeeded: c2 & 0x3f)])
         }
-
-        return result
     }
 
     private static func char64(of x: UInt8) -> UInt8 {
@@ -78,10 +76,9 @@ struct Base64 {
     }
 
     @usableFromInline
-    static func decode(_ s: [UInt8], count maxolen: Int) throws(Base64Error) -> [UInt8] {
+    static func decode(_ s: Span<UInt8>, count maxolen: Int, into output: inout OutputSpan<UInt8>) throws(Base64Error) {
         var off = 0
         var olen = 0
-        var result = [UInt8](repeating: 0, count: maxolen)
 
         var c1: UInt8
         var c2: UInt8
@@ -100,7 +97,7 @@ struct Base64 {
 
             o = c1 &<< 2
             o |= (c2 & 0x30) &>> 4
-            result[olen] = o
+            output.append(o)
             olen &+= 1
             if olen >= maxolen || off >= s.count {
                 break
@@ -115,7 +112,7 @@ struct Base64 {
 
             o = (c2 & 0x0f) &<< 4
             o |= (c3 & 0x3c) &>> 2
-            result[olen] = o
+            output.append(o)
             olen &+= 1
             if olen >= maxolen || off >= s.count {
                 break
@@ -125,10 +122,9 @@ struct Base64 {
             off &+= 1
             o = (c3 & 0x03) &<< 6
             o |= c4
-            result[olen] = o
+            output.append(o)
             olen &+= 1
         }
 
-        return Array(result[0..<olen])
     }
 }
