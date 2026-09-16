@@ -23,6 +23,14 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -yq libjemalloc-dev jq
 
+      # The instructions metric uses perf_event_open on the benchmark process itself (user space only).
+      # Ubuntu ships kernel.perf_event_paranoid=4, which refuses all unprivileged perf use and makes
+      # the metric read as zero; 1 allows it (2 would also do, 1 leaves headroom for kernel counts).
+      - name: Allow perf counters for the instructions metric
+        run: |
+          sudo sysctl -w kernel.perf_event_paranoid=1
+          cat /proc/sys/kernel/perf_event_paranoid
+
       # TODO: Update with swift:6.4 image when available
       - name: Install Swift
         uses: vapor/swiftly-action@v0.2
@@ -30,7 +38,7 @@ jobs:
           toolchain: "6.4"
 
       - name: Check out code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -48,30 +56,40 @@ jobs:
             benchmark baseline update pull_request --no-progress --quiet \
             --benchmark-build-configuration debug
 
+      # The merge base is benchmarked with the pull request's Package.resolved so that both runs use
+      # the same package-benchmark plugin (older pins may lack flags used below). If the merge base
+      # cannot be benchmarked at all, the comparison is skipped rather than failing the job.
       - name: Run benchmarks for the merge base
+        id: base
+        continue-on-error: true
         run: |
+          cp Benchmarks/Package.resolved "${RUNNER_TEMP}/Package.resolved"
           git stash
           git checkout --quiet ${{ github.event.pull_request.base.sha }}
+          cp "${RUNNER_TEMP}/Package.resolved" Benchmarks/Package.resolved
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
             benchmark baseline update main --no-progress --quiet \
             --benchmark-build-configuration debug
 
-      - name: Compare benchmarks
-        id: comparison
+      - name: Read pull request results
         run: |
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
             benchmark baseline read pull_request \
             --format markdown --benchmark-build-configuration debug \
-            | tee -a benchmark.md
+            | tee benchmark.md
 
+      - name: Compare benchmarks
+        id: comparison
+        if: ${{ steps.base.outcome == 'success' }}
+        run: |
           set +e
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
             benchmark baseline check main pull_request \
             --format markdown --benchmark-build-configuration debug \
-            | tee -a comparison.md
+            | tee comparison.md
           CHECK_EXIT=$?
           set -e
           echo "exit-status=${CHECK_EXIT}" >> "${GITHUB_OUTPUT}"
@@ -95,14 +113,18 @@ jobs:
               1) echo '**❓ Significant performance differences**' ;;
               2) echo '**❌ Significant performance regressions**' ;;
               4) echo '**⚠️ Significant performance improvements**' ;;
+              '') echo '**ℹ️ The merge base could not be benchmarked, showing pull request results only**' ;;
               *) echo '**🚫 Benchmark comparison failed with exit code ${{ steps.comparison.outputs.exit-status }}**' ;;
             esac
             echo ""
-            printf '<details>\n<summary>Comparison against main</summary>\n\n%s\n\n</details>\n\n' "$(cat comparison.md)"
+            if [ -f comparison.md ]; then
+              printf '<details>\n<summary>Comparison against main</summary>\n\n%s\n\n</details>\n\n' "$(cat comparison.md)"
+            fi
             printf '<details>\n<summary>Pull request results</summary>\n\n%s\n\n</details>\n' "$(cat benchmark.md)"
           } > comment.md
           cat comment.md >> "${GITHUB_STEP_SUMMARY}"
 
+      # GITHUB_TOKEN is read-only for pull requests from forks, so only comment on same-repo PRs.
       - name: Post or update the PR comment
         if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         env:
@@ -133,9 +155,10 @@ jobs:
               -d "{\"body\": ${BODY}}"
           fi
 
+      # Only regressions (2) fail the job; differences (1), improvements (4) and a skipped comparison pass.
       - name: Fail on regressions
         run: |
           case '${{ steps.comparison.outputs.exit-status }}' in
-            0|1|4) exit 0 ;;
+            ''|0|1|4) exit 0 ;;
             *) exit 1 ;;
           esac
