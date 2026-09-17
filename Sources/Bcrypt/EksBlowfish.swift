@@ -44,7 +44,7 @@
 
         for _ in 0..<4 {
             if j >= length { j = 0 }
-            let byte: UInt8 = j < data.count ? data[unchecked: j] : 0
+            let byte: UInt8 = unsafe j < data.count ? data[unchecked: j] : 0
             word = (word &<< 8) | UInt32(byte)
             j &+= 1
         }
@@ -141,35 +141,35 @@
     @_transparent
     @usableFromInline
     static func f(_ s: borrowing MutableSpan<UInt32>, _ x: UInt32) -> UInt32 {
-        let a = s[unchecked: Int(truncatingIfNeeded: x &>> 24)]
-        let b = s[unchecked: 0x100 &+ Int(truncatingIfNeeded: (x &>> 16) & 0xff)]
-        let c = s[unchecked: 0x200 &+ Int(truncatingIfNeeded: (x &>> 8) & 0xff)]
-        let d = s[unchecked: 0x300 &+ Int(truncatingIfNeeded: x & 0xff)]
+        let a = unsafe s[unchecked: Int(truncatingIfNeeded: x &>> 24)]
+        let b = unsafe s[unchecked: 0x100 &+ Int(truncatingIfNeeded: (x &>> 16) & 0xff)]
+        let c = unsafe s[unchecked: 0x200 &+ Int(truncatingIfNeeded: (x &>> 8) & 0xff)]
+        let d = unsafe s[unchecked: 0x300 &+ Int(truncatingIfNeeded: x & 0xff)]
         return ((a &+ b) ^ c) &+ d
     }
 
     @_transparent
     @usableFromInline
     static func encipher(xl: inout UInt32, xr: inout UInt32, p: borrowing MutableSpan<UInt32>, s: borrowing MutableSpan<UInt32>) {
-        var l = xl ^ p[unchecked: 0]
+        var l = unsafe xl ^ p[unchecked: 0]
         var r = xr
-        r ^= f(s, l) ^ p[unchecked: 1]
-        l ^= f(s, r) ^ p[unchecked: 2]
-        r ^= f(s, l) ^ p[unchecked: 3]
-        l ^= f(s, r) ^ p[unchecked: 4]
-        r ^= f(s, l) ^ p[unchecked: 5]
-        l ^= f(s, r) ^ p[unchecked: 6]
-        r ^= f(s, l) ^ p[unchecked: 7]
-        l ^= f(s, r) ^ p[unchecked: 8]
-        r ^= f(s, l) ^ p[unchecked: 9]
-        l ^= f(s, r) ^ p[unchecked: 10]
-        r ^= f(s, l) ^ p[unchecked: 11]
-        l ^= f(s, r) ^ p[unchecked: 12]
-        r ^= f(s, l) ^ p[unchecked: 13]
-        l ^= f(s, r) ^ p[unchecked: 14]
-        r ^= f(s, l) ^ p[unchecked: 15]
-        l ^= f(s, r) ^ p[unchecked: 16]
-        xl = r ^ p[unchecked: 17]
+        unsafe r ^= f(s, l) ^ p[unchecked: 1]
+        unsafe l ^= f(s, r) ^ p[unchecked: 2]
+        unsafe r ^= f(s, l) ^ p[unchecked: 3]
+        unsafe l ^= f(s, r) ^ p[unchecked: 4]
+        unsafe r ^= f(s, l) ^ p[unchecked: 5]
+        unsafe l ^= f(s, r) ^ p[unchecked: 6]
+        unsafe r ^= f(s, l) ^ p[unchecked: 7]
+        unsafe l ^= f(s, r) ^ p[unchecked: 8]
+        unsafe r ^= f(s, l) ^ p[unchecked: 9]
+        unsafe l ^= f(s, r) ^ p[unchecked: 10]
+        unsafe r ^= f(s, l) ^ p[unchecked: 11]
+        unsafe l ^= f(s, r) ^ p[unchecked: 12]
+        unsafe r ^= f(s, l) ^ p[unchecked: 13]
+        unsafe l ^= f(s, r) ^ p[unchecked: 14]
+        unsafe r ^= f(s, l) ^ p[unchecked: 15]
+        unsafe l ^= f(s, r) ^ p[unchecked: 16]
+        unsafe xl = r ^ p[unchecked: 17]
         xr = l
     }
 }

@@ -15,6 +15,7 @@ let package = Package(
     targets: [
         .target(
             name: "Bcrypt",
+            swiftSettings: swiftSettings
         ),
         .testTarget(
             name: "BcryptTests",
@@ -22,3 +23,21 @@ let package = Package(
         ),
     ]
 )
+
+var swiftSettings: [SwiftSetting] {
+    [
+        .strictMemorySafety(),
+        //    .treatAllWarnings(as: .error),
+        .enableUpcomingFeature("ExistentialAny"),
+        .enableUpcomingFeature("InternalImportsByDefault"),
+        .enableUpcomingFeature("MemberImportVisibility"),
+        .enableUpcomingFeature("InferIsolatedConformances"),
+        .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+        .enableUpcomingFeature("ImmutableWeakCaptures"),
+        .enableExperimentalFeature("SuppressedAssociatedTypesWithDefaults"),
+        .enableExperimentalFeature("LifetimeDependence"),
+        .enableExperimentalFeature("Lifetimes"),
+        .enableUpcomingFeature("LifetimeDependence"),
+        .enableUpcomingFeature("ImmutableWeakCaptures"),
+    ]
+}

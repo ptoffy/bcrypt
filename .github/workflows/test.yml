@@ -51,10 +51,14 @@ jobs:
     uses: swiftlang/github-workflows/.github/workflows/soundness.yml@main
     with:
       format_check_enabled: true
+      api_breakage_check_enabled: true
+      api_breakage_check_container_image: "swiftlang/swift:nightly-6.4.x-noble"
+      docs_check_enabled: false
+      docs_check_analyze: false
+      docs_check_macos_analyze: false
+      license_header_check_enabled: false
+      unacceptable_language_check_enabled: false
       broken_symlink_check_enabled: false
       shell_check_enabled: false
       yamllint_check_enabled: false
-      api_breakage_check_enabled: true
-      docs_check_enabled: false
-      license_header_check_enabled: false
-      unacceptable_language_check_enabled: false
+      python_lint_check_enabled: false
