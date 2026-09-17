@@ -1,0 +1,8 @@
+.build/
+
+/fuzz-*.log
+
+/crash-*
+/leak-*
+/timeout-*
+/oom-*

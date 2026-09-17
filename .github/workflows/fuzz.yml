@@ -1,0 +1,62 @@
+name: fuzz
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "Sources/**"
+      - "Fuzzing/**"
+      - ".github/workflows/fuzz.yml"
+  schedule:
+    - cron: "0 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container: swiftlang/swift:nightly-6.4.x-noble
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [Hash, Verify]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Configure git
+        run: git config --global --add safe.directory '*'
+
+      - name: Cache fuzz build
+        uses: actions/cache@v4
+        with:
+          path: Fuzzing/.build
+          key: fuzz-${{ hashFiles('Fuzzing/Package.resolved') }}
+          restore-keys: fuzz-
+
+      - name: Replay the committed corpus
+        run: |
+          swift package --package-path Fuzzing --allow-writing-to-package-directory \
+            fuzz ${{ matrix.target }} --replay
+
+      - name: Fuzz
+        run: |
+          swift package --package-path Fuzzing --allow-writing-to-package-directory \
+            fuzz ${{ matrix.target }} --time ${{ github.event_name == 'schedule' && 1200 || 120 }}
+
+      - name: Upload crash artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes-${{ matrix.target }}
+          path: Fuzzing/Crashes/${{ matrix.target }}
+          if-no-files-found: ignore
