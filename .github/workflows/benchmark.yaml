@@ -63,6 +63,10 @@ jobs:
             --package-path Benchmarks \
             benchmark baseline update main --no-progress --quiet
 
+      - name: Restore the pull request checkout
+        if: ${{ always() }}
+        run: git checkout --quiet --force ${{ github.sha }}
+
       - name: Read pull request results
         run: |
           swift package -c release --disable-sandbox \
