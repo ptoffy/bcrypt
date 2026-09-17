@@ -1,7 +1,7 @@
 extension EksBlowfish {
     @usableFromInline
     @inline(__always)
-    static let initialP: [UInt32] = [
+    static let initialP: InlineArray<18, UInt32> = [
         0x243f_6a88, 0x85a3_08d3, 0x1319_8a2e, 0x0370_7344,
         0xa409_3822, 0x299f_31d0, 0x082e_fa98, 0xec4e_6c89,
         0x4528_21e6, 0x38d0_1377, 0xbe54_66cf, 0x34e9_0c6c,
@@ -11,7 +11,7 @@ extension EksBlowfish {
 
     @usableFromInline
     @inline(__always)
-    static let initialS: [UInt32] = [
+    static let initialS: InlineArray<1024, UInt32> = [
         0xd131_0ba6, 0x98df_b5ac, 0x2ffd_72db, 0xd01a_dfb7,
         0xb8e1_afed, 0x6a26_7e96, 0xba7c_9045, 0xf12c_7f99,
         0x24a1_9947, 0xb391_6cf7, 0x0801_f2e2, 0x858e_fc16,

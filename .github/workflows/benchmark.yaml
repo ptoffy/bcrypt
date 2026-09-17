@@ -1,36 +1,64 @@
 name: benchmark
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.sha }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
+    paths:
+      - "**.swift"
+      - "Package.resolved"
+      - "Benchmarks/**"
+      - ".github/workflows/benchmark.yaml"
 
-env:
-  RUN_LINK: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-  CHECK_NAME: "benchmark / benchmark-vs-thresholds"
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
-  benchmark-vs-thresholds:
-    # https://runs-on.com/features/custom-runners/
-    runs-on: ubuntu-latest
-    container: swift:noble
-
-    defaults:
-      run:
-        shell: bash --noprofile --norc -e -u -o pipefail {0}
+  benchmark-vs-main:
+    name: ${{ matrix.os }} ${{ matrix.configuration }}
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-26]
+        configuration: [release, debug]
+        include:
+          - os: ubuntu-latest
+            container: swiftlang/swift:nightly-6.4.x-noble
 
     steps:
-      # jemalloc is a dependency of the Benchmarking package
-      # actions/cache will detect zstd and will become much faster.
-      - name: Install jemalloc, zstd, curl and jq
+      - name: Install dependencies (Linux)
+        if: ${{ runner.os == 'Linux' }}
         run: |
-          apt update -q && apt install -yq libjemalloc-dev zstd curl jq
+          apt-get update -q
+          apt-get install -yq libjemalloc-dev jq curl zstd
 
-      - name: Install node
+      - name: Install dependencies (macOS)
+        if: ${{ runner.os == 'macOS' }}
+        run: brew install jemalloc
+
+      - name: Install Swift (macOS)
+        if: ${{ runner.os == 'macOS' }}
         run: |
-          apt-get install -y nodejs
+          # Neither vapor/swiftly-action (Linux package managers only) nor swift-actions/setup-swift
+          # (hardcoded version table, no 6.4 yet) can install 6.4 on macOS, so drive swiftly directly:
+          # https://www.swift.org/install/macos/
+          curl -sSL https://download.swift.org/swiftly/darwin/swiftly.pkg -o "${RUNNER_TEMP}/swiftly.pkg"
+          installer -pkg "${RUNNER_TEMP}/swiftly.pkg" -target CurrentUserHomeDirectory
+          ~/.swiftly/bin/swiftly init --assume-yes --skip-install --no-modify-profile --quiet-shell-followup
+          . "${SWIFTLY_HOME_DIR:-${HOME}/.swiftly}/env.sh"
+          swiftly install --use --assume-yes 6.4
+          echo "SWIFTLY_HOME_DIR=${SWIFTLY_HOME_DIR}" >> "${GITHUB_ENV}"
+          echo "SWIFTLY_BIN_DIR=${SWIFTLY_BIN_DIR}" >> "${GITHUB_ENV}"
+          echo "${SWIFTLY_BIN_DIR}" >> "${GITHUB_PATH}"
+          swift --version
 
       - name: Check out code
         uses: actions/checkout@v6
@@ -38,50 +66,218 @@ jobs:
           fetch-depth: 0
 
       - name: Configure git
-        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+        run: git config --global --add safe.directory '*'
 
-      - name: Run benchmarks for PR
+      - name: Cache benchmark build
+        uses: actions/cache@v4
+        with:
+          path: Benchmarks/.build
+          key: benchmarks-${{ matrix.os }}-${{ matrix.configuration }}-${{ hashFiles('Benchmarks/Package.resolved') }}
+          restore-keys: benchmarks-${{ matrix.os }}-${{ matrix.configuration }}-
+
+      - name: Run benchmarks for the pull request
         run: |
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
-            benchmark baseline update pull-request --no-progress --quiet
+            benchmark baseline update pull_request --no-progress --quiet \
+            --benchmark-build-configuration ${{ matrix.configuration }}
 
-      - name: Run benchmarks for main
-        if: ${{ github.event_name == 'pull_request' }}
+      # The merge base is benchmarked with the pull request's Package.resolved so that both runs use
+      # the same package-benchmark plugin (older pins may lack flags used here). If the merge base
+      # cannot be benchmarked at all, the comparison is skipped rather than failing the job.
+      - name: Run benchmarks for the merge base
+        id: base
+        continue-on-error: true
         run: |
+          cp Benchmarks/Package.resolved "${RUNNER_TEMP}/Package.resolved"
           git stash
-          git checkout main
+          git checkout --quiet ${{ github.event.pull_request.base.sha || 'main' }}
+          cp "${RUNNER_TEMP}/Package.resolved" Benchmarks/Package.resolved
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
-            benchmark baseline update main --no-progress --quiet
+            benchmark baseline update main --no-progress --quiet \
+            --benchmark-build-configuration ${{ matrix.configuration }}
+
+      # The read/check/compare commands enumerate the benchmark targets of the checked-out package,
+      # and the merge base may have fewer targets than the pull request, so go back to the PR first.
+      # --force discards the Package.resolved we copied over the merge base; baselines are untracked.
+      - name: Restore the pull request checkout
+        run: git checkout --quiet --force ${{ github.sha }}
+
+      - name: Read pull request results
+        run: |
+          swift package -c release --disable-sandbox \
+            --package-path Benchmarks \
+            benchmark baseline read pull_request \
+            --format markdown --benchmark-build-configuration ${{ matrix.configuration }} \
+            | tee benchmark.md
 
       - name: Compare benchmarks
         id: comparison
+        if: ${{ steps.base.outcome == 'success' }}
         run: |
-          echo '## Summary' >> $GITHUB_STEP_SUMMARY
-          echo $(date) >> $GITHUB_STEP_SUMMARY
-          echo "exitStatus=1" >> $GITHUB_ENV
-          swift package benchmark baseline check main pull_request --format markdown >> $GITHUB_STEP_SUMMARY
-          echo '---' >> $GITHUB_STEP_SUMMARY
-          swift package benchmark baseline compare main pull_request --no-progress --quiet --format markdown >> $GITHUB_STEP_SUMMARY
-          echo "exitStatus=0" >> $GITHUB_ENV
-        continue-on-error: true
+          set +e
+          swift package -c release --disable-sandbox \
+            --package-path Benchmarks \
+            benchmark baseline check main pull_request \
+            --format markdown --benchmark-build-configuration ${{ matrix.configuration }} \
+            | tee comparison.md
+          CHECK_EXIT=$?
+          set -e
+          echo "exit-status=${CHECK_EXIT}" >> "${GITHUB_OUTPUT}"
 
-      - if: ${{ env.exitStatus == '0' }}
-        name: Pull request comment text success
-        id: prtestsuccess
-        run: |
-          echo 'PRTEST<<EOF' >> $GITHUB_ENV
-          echo "[Pull request benchmark comparison [${{ matrix.os }}] with 'main' run at $(date -Iseconds)](https://github.com/ordo-one/${{ github.event.repository.name }}/actions/runs/${{ github.run_id }})" >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
-      - if: ${{ env.exitStatus == '1' }}
-        name: Pull request comment text failure
-        id: prtestfailure
-        run: |
-          echo 'PRTEST<<EOF' >> $GITHUB_ENV
-          echo "[Pull request benchmark comparison [${{ matrix.os }}] with 'main' run at $(date -Iseconds)](https://github.com/ordo-one/${{ github.event.repository.name }}/actions/runs/${{ github.run_id }})" >> $GITHUB_ENV
-          echo "_Pull request had performance regressions_" >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
+          printf '\n---\n\n' >> comparison.md
+          swift package -c release --disable-sandbox \
+            --package-path Benchmarks \
+            benchmark baseline compare main pull_request \
+            --no-progress --quiet --benchmark-build-configuration ${{ matrix.configuration }} \
+            --format markdown >> comparison.md
 
-      - name: Exit with correct status
-        run: exit ${{ steps.comparison.outputs.exit-status }}
+      # Each job writes its full comparison to its own step summary and hands the short pieces to the
+      # report job below, which assembles a single PR comment for the whole matrix.
+      - name: Publish job results
+        env:
+          EXIT_STATUS: ${{ steps.comparison.outputs.exit-status }}
+        run: |
+          mkdir -p report
+          printf '%s' "${EXIT_STATUS}" > report/status.txt
+          if [ -f comparison.md ]; then
+            # The check verdict is the part before the '---' separator (the compare tables follow it),
+            # minus SwiftPM's build chatter and blank lines.
+            sed '/^---$/,$d' comparison.md | grep -vE '^(Building for|\[.*\]|Build complete!|\s*$)' > report/check.md || true
+          else
+            printf 'The merge base could not be benchmarked.\n' > report/check.md
+          fi
+          # Keep the per-target sections of the results, drop the baseline/host preamble above them.
+          awk '/^## / && !/^## Baseline/ { keep = 1 } keep' benchmark.md > report/results.md
+
+          {
+            echo "## Benchmark: ${{ matrix.os }}, ${{ matrix.configuration }}"
+            echo ""
+            if [ -f comparison.md ]; then
+              printf '<details>\n<summary>Comparison against main</summary>\n\n%s\n\n</details>\n\n' "$(cat comparison.md)"
+            fi
+            printf '<details>\n<summary>Pull request results</summary>\n\n%s\n\n</details>\n' "$(cat benchmark.md)"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload job results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ matrix.os }}-${{ matrix.configuration }}
+          path: report
+          retention-days: 7
+
+      # Only regressions (2) fail the job; differences (1), improvements (4) and a skipped comparison pass.
+      - name: Fail on regressions
+        run: |
+          case '${{ steps.comparison.outputs.exit-status }}' in
+            ''|0|1|4) exit 0 ;;
+            *) exit 1 ;;
+          esac
+
+  # One comment for the whole matrix: a summary table, then a collapsible section per job. Runs even
+  # when a benchmark job failed so the comment reflects that. GITHUB_TOKEN is read-only for pull
+  # requests from forks, so the comment is only posted for same-repo PRs.
+  report:
+    name: Report
+    needs: benchmark-vs-main
+    if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Download job results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: benchmark-*
+          path: results
+
+      - name: Construct the comment
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          describe() {
+            case "$1" in
+              0) echo "✅ No significant differences" ;;
+              1) echo "❓ Significant differences" ;;
+              2) echo "❌ Regressions" ;;
+              4) echo "⚠️ Improvements" ;;
+              '') echo "ℹ️ No baseline from main" ;;
+              missing) echo "🚫 Job failed" ;;
+              *) echo "🚫 Check exited with $1" ;;
+            esac
+          }
+
+          {
+            echo '<!-- benchmark-report -->'
+            echo "## Benchmark report"
+            echo ""
+            echo "Commit \`${HEAD_SHA:0:7}\` against \`main\`, cost 12. Full comparisons are in the [run summary](${RUN_URL})."
+            echo ""
+            echo "| Platform | Configuration | Result |"
+            echo "|:--|:--|:--|"
+            for os in ubuntu-latest macos-26; do
+              for configuration in release debug; do
+                dir="results/benchmark-${os}-${configuration}"
+                if [ -f "${dir}/status.txt" ]; then
+                  status="$(cat "${dir}/status.txt")"
+                else
+                  status=missing
+                fi
+                echo "| ${os} | ${configuration} | $(describe "${status}") |"
+              done
+            done
+            echo ""
+            for os in ubuntu-latest macos-26; do
+              for configuration in release debug; do
+                dir="results/benchmark-${os}-${configuration}"
+                [ -d "${dir}" ] || continue
+                echo "<details>"
+                echo "<summary><b>${os}, ${configuration}</b></summary>"
+                echo ""
+                cat "${dir}/check.md"
+                echo ""
+                cat "${dir}/results.md"
+                echo ""
+                echo "</details>"
+                echo ""
+              done
+            done
+          } > comment.md
+
+          # GitHub rejects comment bodies over 65536 characters.
+          if [ "$(wc -c < comment.md)" -gt 60000 ]; then
+            head -c 60000 comment.md > comment.trimmed
+            printf '\n\n_Comment truncated; see the run summary for the rest._\n' >> comment.trimmed
+            mv comment.trimmed comment.md
+          fi
+
+      - name: Post or update the PR comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API: ${{ github.api_url }}/repos/${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          BODY="$(jq -Rs . comment.md)"
+          EXISTING="$(curl -sS \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${API}/issues/${PR_NUMBER}/comments?per_page=100" \
+            | jq -r '[.[] | select(.body | contains("<!-- benchmark-report -->"))][0].id // empty')"
+
+          if [ -n "${EXISTING}" ]; then
+            curl -sS -o /dev/null -w "update comment ${EXISTING}: %{http_code}\n" \
+              -X PATCH \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${API}/issues/comments/${EXISTING}" \
+              -d "{\"body\": ${BODY}}"
+          else
+            curl -sS -o /dev/null -w "create comment: %{http_code}\n" \
+              -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${API}/issues/${PR_NUMBER}/comments" \
+              -d "{\"body\": ${BODY}}"
+          fi

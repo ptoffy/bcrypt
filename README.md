@@ -24,11 +24,19 @@ let isValid = try Bcrypt.verify(password: password, hash: hash)
 
 ## Performance
 
-Currently these are the benchmarks for hashing the password "password" with cost factor 12, compared to Vapor's C Bcrypt implementation. Measurements were taken on an M2 MacBook Air.
+Benchmarks for hashing the password "password" at cost factor 12 using the 
+```swift
+func hash(
+    password: Span<UInt8>,
+    cost: Int = 10,
+    salt: Span<UInt8>,
+    version: BcryptVersion = .v2b,
+    into output: inout OutputSpan<UInt8>
+) throws(BcryptError)
+```
+API, compared to Vapor's C bcrypt ([vapor/authentication](https://github.com/vapor/authentication)), measured on an Apple M5 Pro with the [benchmark](https://github.com/ordo-one/benchmark) package.
 
 | | Release ms | Debug ms | Allocations Release | Allocations Debug |
 |------|------------|----------|---------------------|-------------------|
-| vapor/authentication | 215ms | 337ms | ~13,700 | ~13,800 |
-| bcrypt | 195ms | 453ms | ~13,400 | ~13,500 |
-
-    
+| vapor/authentication | 170ms | 270ms | 11 | 181 |
+| bcrypt | 149ms | 440ms | 0 | 0 |

@@ -1,4 +1,9 @@
-name: Lint, Build & Test with Coverage
+name: test
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -6,21 +11,50 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    container: swift:noble
+  unit-tests-linux:
+    name: Unit tests (Linux)
+    uses: swiftlang/github-workflows/.github/workflows/swift_package_test.yml@main
+    with:
+      linux_swift_versions: '["nightly-6.4.x"]'
+      linux_os_versions: '["noble"]'
+      enable_macos_checks: false
+      enable_windows_checks: false
+
+  unit-tests-macos:
+    name: Unit tests (macOS)
+    runs-on: macos-26
+    timeout-minutes: 30
     steps:
-      - name: Install curl
-        run: apt-get update -yq && apt-get install -y curl
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Lint
-        run: swift-format lint --recursive --strict --parallel .
+      - name: Install Swift
+        run: |
+          # Neither vapor/swiftly-action (Linux package managers only) nor swift-actions/setup-swift
+          # (hardcoded version table, no 6.4 yet) can install 6.4 on macOS, so drive swiftly directly:
+          # https://www.swift.org/install/macos/
+          curl -sSL https://download.swift.org/swiftly/darwin/swiftly.pkg -o "${RUNNER_TEMP}/swiftly.pkg"
+          installer -pkg "${RUNNER_TEMP}/swiftly.pkg" -target CurrentUserHomeDirectory
+          ~/.swiftly/bin/swiftly init --assume-yes --skip-install --no-modify-profile --quiet-shell-followup
+          . "${SWIFTLY_HOME_DIR:-${HOME}/.swiftly}/env.sh"
+          swiftly install --use --assume-yes 6.4
+          echo "SWIFTLY_HOME_DIR=${SWIFTLY_HOME_DIR}" >> "${GITHUB_ENV}"
+          echo "SWIFTLY_BIN_DIR=${SWIFTLY_BIN_DIR}" >> "${GITHUB_ENV}"
+          echo "${SWIFTLY_BIN_DIR}" >> "${GITHUB_PATH}"
+          swift --version
+      - name: Check out code
+        uses: actions/checkout@v6
       - name: Build
         run: swift build
       - name: Test
-        run: swift test --enable-code-coverage
-      - name: Generate Coverage Report
-        uses: vapor/swift-codecov-action@v0.3
-        with:
-          codecov_token: ${{ secrets.CODECOV_TOKEN }}
+        run: swift test
+
+  soundness:
+    name: Soundness
+    uses: swiftlang/github-workflows/.github/workflows/soundness.yml@main
+    with:
+      format_check_enabled: true
+      broken_symlink_check_enabled: false
+      shell_check_enabled: false
+      yamllint_check_enabled: false
+      api_breakage_check_enabled: true
+      docs_check_enabled: false
+      license_header_check_enabled: false
+      unacceptable_language_check_enabled: false
