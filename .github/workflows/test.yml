@@ -26,9 +26,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install Swift
-        uses: vapor/swiftly-action@v0.2
+        uses: swift-actions/setup-swift@v2
         with:
-          toolchain: "6.4"
+          swift-version: "6.4"
       - name: Check out code
         uses: actions/checkout@v6
       - name: Build

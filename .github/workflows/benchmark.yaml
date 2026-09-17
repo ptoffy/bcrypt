@@ -34,7 +34,6 @@ jobs:
             container: swiftlang/swift:nightly-6.4.x-noble
 
     steps:
-      # jemalloc is required by package-benchmark for the malloc metrics; zstd speeds up actions/cache.
       - name: Install dependencies (Linux)
         if: ${{ runner.os == 'Linux' }}
         run: |
@@ -45,12 +44,11 @@ jobs:
         if: ${{ runner.os == 'macOS' }}
         run: brew install jemalloc
 
-      # The runner's Xcode does not necessarily ship Swift 6.4, which the manifests require.
       - name: Install Swift (macOS)
         if: ${{ runner.os == 'macOS' }}
-        uses: vapor/swiftly-action@v0.2
+        uses: swift-actions/setup-swift@v2
         with:
-          toolchain: "6.4"
+          swift-version: "6.4"
 
       - name: Check out code
         uses: actions/checkout@v6
@@ -94,7 +92,6 @@ jobs:
       # and the merge base may have fewer targets than the pull request, so go back to the PR first.
       # --force discards the Package.resolved we copied over the merge base; baselines are untracked.
       - name: Restore the pull request checkout
-        if: ${{ always() }}
         run: git checkout --quiet --force ${{ github.sha }}
 
       - name: Read pull request results
