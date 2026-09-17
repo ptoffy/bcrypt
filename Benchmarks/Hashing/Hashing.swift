@@ -2,8 +2,14 @@ import Bcrypt
 import Benchmark
 
 let benchmarks = { @Sendable in
+    #if os(Linux)
+        let metrics: [BenchmarkMetric] = [.mallocCountTotal, .wallClock]
+    #else
+        let metrics: [BenchmarkMetric] = [.mallocCountTotal, .instructions, .wallClock]
+    #endif
+
     Benchmark.defaultConfiguration = .init(
-        metrics: [.mallocCountTotal, .instructions, .wallClock],
+        metrics: metrics,
         thresholds: [
             .mallocCountTotal: .init(absolute: BenchmarkThresholds.Absolute.strict),
             .instructions: .init(relative: BenchmarkThresholds.Relative.default),

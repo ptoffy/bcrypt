@@ -5,8 +5,14 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
+    paths:
+      - "**.swift"
+      - "Package.resolved"
+      - "Benchmarks/**"
+      - ".github/workflows/benchmark.yaml"
 
 permissions:
   contents: read
@@ -14,18 +20,37 @@ permissions:
 
 jobs:
   benchmark-vs-main:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    container:
-      image: swiftlang/swift:nightly-6.4.x-noble
-      options: --privileged
+    name: ${{ matrix.os }} ${{ matrix.configuration }}
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-26]
+        configuration: [release, debug]
+        include:
+          - os: ubuntu-latest
+            container: swiftlang/swift:nightly-6.4.x-noble
 
     steps:
       # jemalloc is required by package-benchmark for the malloc metrics; zstd speeds up actions/cache.
-      - name: Install jemalloc, jq, curl and zstd
+      - name: Install dependencies (Linux)
+        if: ${{ runner.os == 'Linux' }}
         run: |
           apt-get update -q
           apt-get install -yq libjemalloc-dev jq curl zstd
+
+      - name: Install dependencies (macOS)
+        if: ${{ runner.os == 'macOS' }}
+        run: brew install jemalloc
+
+      # The runner's Xcode does not necessarily ship Swift 6.4, which the manifests require.
+      - name: Install Swift (macOS)
+        if: ${{ runner.os == 'macOS' }}
+        uses: vapor/swiftly-action@v0.2
+        with:
+          toolchain: "6.4"
 
       - name: Check out code
         uses: actions/checkout@v6
@@ -39,17 +64,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Benchmarks/.build
-          key: benchmarks-${{ runner.os }}-${{ hashFiles('Benchmarks/Package.resolved') }}
-          restore-keys: benchmarks-${{ runner.os }}-
+          key: benchmarks-${{ matrix.os }}-${{ matrix.configuration }}-${{ hashFiles('Benchmarks/Package.resolved') }}
+          restore-keys: benchmarks-${{ matrix.os }}-${{ matrix.configuration }}-
 
       - name: Run benchmarks for the pull request
         run: |
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
-            benchmark baseline update pull_request --no-progress --quiet
+            benchmark baseline update pull_request --no-progress --quiet \
+            --benchmark-build-configuration ${{ matrix.configuration }}
 
       # The merge base is benchmarked with the pull request's Package.resolved so that both runs use
-      # the same package-benchmark plugin (older pins may lack flags used below). If the merge base
+      # the same package-benchmark plugin (older pins may lack flags used here). If the merge base
       # cannot be benchmarked at all, the comparison is skipped rather than failing the job.
       - name: Run benchmarks for the merge base
         id: base
@@ -57,12 +83,16 @@ jobs:
         run: |
           cp Benchmarks/Package.resolved "${RUNNER_TEMP}/Package.resolved"
           git stash
-          git checkout --quiet ${{ github.event.pull_request.base.sha }}
+          git checkout --quiet ${{ github.event.pull_request.base.sha || 'main' }}
           cp "${RUNNER_TEMP}/Package.resolved" Benchmarks/Package.resolved
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
-            benchmark baseline update main --no-progress --quiet
+            benchmark baseline update main --no-progress --quiet \
+            --benchmark-build-configuration ${{ matrix.configuration }}
 
+      # The read/check/compare commands enumerate the benchmark targets of the checked-out package,
+      # and the merge base may have fewer targets than the pull request, so go back to the PR first.
+      # --force discards the Package.resolved we copied over the merge base; baselines are untracked.
       - name: Restore the pull request checkout
         if: ${{ always() }}
         run: git checkout --quiet --force ${{ github.sha }}
@@ -72,7 +102,7 @@ jobs:
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
             benchmark baseline read pull_request \
-            --format markdown \
+            --format markdown --benchmark-build-configuration ${{ matrix.configuration }} \
             | tee benchmark.md
 
       - name: Compare benchmarks
@@ -83,7 +113,7 @@ jobs:
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
             benchmark baseline check main pull_request \
-            --format markdown \
+            --format markdown --benchmark-build-configuration ${{ matrix.configuration }} \
             | tee comparison.md
           CHECK_EXIT=$?
           set -e
@@ -93,15 +123,17 @@ jobs:
           swift package -c release --disable-sandbox \
             --package-path Benchmarks \
             benchmark baseline compare main pull_request \
-            --no-progress --quiet \
+            --no-progress --quiet --benchmark-build-configuration ${{ matrix.configuration }} \
             --format markdown >> comparison.md
 
       - name: Construct result comment
+        env:
+          MARKER: "<!-- benchmark-report-${{ matrix.os }}-${{ matrix.configuration }} -->"
         run: |
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           {
-            echo '<!-- benchmark-report -->'
-            echo "## [Benchmark](${RUN_URL}) report"
+            echo "${MARKER}"
+            echo "## [Benchmark](${RUN_URL}) report: ${{ matrix.os }}, ${{ matrix.configuration }}"
             echo ""
             case '${{ steps.comparison.outputs.exit-status }}' in
               0) echo '**✅ No significant performance differences**' ;;
@@ -121,18 +153,19 @@ jobs:
 
       # GITHUB_TOKEN is read-only for pull requests from forks, so only comment on same-repo PRs.
       - name: Post or update the PR comment
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           API: ${{ github.api_url }}/repos/${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          MARKER: "<!-- benchmark-report-${{ matrix.os }}-${{ matrix.configuration }} -->"
         run: |
           BODY="$(jq -Rs . comment.md)"
           EXISTING="$(curl -sS \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             "${API}/issues/${PR_NUMBER}/comments?per_page=100" \
-            | jq -r '[.[] | select(.body | contains("<!-- benchmark-report -->"))][0].id // empty')"
+            | jq -r --arg marker "${MARKER}" '[.[] | select(.body | contains($marker))][0].id // empty')"
 
           if [ -n "${EXISTING}" ]; then
             curl -sS -o /dev/null -w "update comment ${EXISTING}: %{http_code}\n" \
