@@ -61,11 +61,8 @@ jobs:
       format_check_enabled: true
       api_breakage_check_enabled: true
       api_breakage_check_container_image: "swift:6.4-noble"
-      # Intentional pre-1.0 breaks; entries are removed once the next tag becomes the baseline.
-      api_breakage_check_allowlist_path: ".api-breakage-allowlist.txt"
-      docs_check_enabled: false
-      docs_check_analyze: false
-      docs_check_macos_analyze: false
+      docs_check_enabled: true
+      docs_check_container_image: "swift:6.4-noble"
       license_header_check_enabled: false
       unacceptable_language_check_enabled: false
       broken_symlink_check_enabled: false

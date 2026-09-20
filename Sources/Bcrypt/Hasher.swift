@@ -22,7 +22,7 @@ extension Bcrypt {
     /// - Throws: ``BcryptError``
     /// - Returns: the hashed password.
     @inlinable
-    public static func hash(password: String, cost: Int = 10, version: BcryptVersion = .v2b) throws(BcryptError) -> String {
+    public static func hash(password: String, cost: Int = 10, version: BcryptVariant = .v2b) throws(BcryptError) -> String {
         String(decoding: try hash(password: password.utf8Span.span, cost: cost, version: version), as: UTF8.self)
     }
 
@@ -34,7 +34,7 @@ extension Bcrypt {
     /// - Throws: ``BcryptError``
     /// - Returns: the hashed password.
     @inlinable
-    public static func hash(password: [UInt8], cost: Int = 10, version: BcryptVersion = .v2b) throws(BcryptError) -> [UInt8] {
+    public static func hash(password: [UInt8], cost: Int = 10, version: BcryptVariant = .v2b) throws(BcryptError) -> [UInt8] {
         try hash(password: password.span, cost: cost, version: version)
     }
 
@@ -46,7 +46,7 @@ extension Bcrypt {
     /// - Throws: ``BcryptError``
     /// - Returns: the hashed password.
     @inlinable
-    public static func hash(password: Span<UInt8>, cost: Int = 10, version: BcryptVersion = .v2b) throws(BcryptError) -> [UInt8] {
+    public static func hash(password: Span<UInt8>, cost: Int = 10, version: BcryptVariant = .v2b) throws(BcryptError) -> [UInt8] {
         let salt = Self.generateRandomSalt()
         return try hash(password: password, cost: cost, salt: salt.span, version: version)
     }
@@ -61,7 +61,7 @@ extension Bcrypt {
     /// - Returns: the hashed password.
     @inlinable
     public static func hash(
-        password: [UInt8], cost: Int = 10, salt: [UInt8], version: BcryptVersion = .v2b
+        password: [UInt8], cost: Int = 10, salt: [UInt8], version: BcryptVariant = .v2b
     ) throws(BcryptError) -> [UInt8] {
         try hash(password: password.span, cost: cost, salt: salt.span, version: version)
     }
@@ -76,7 +76,7 @@ extension Bcrypt {
     /// - Returns: the hashed password.
     @inlinable
     public static func hash(
-        password: Span<UInt8>, cost: Int = 10, salt: Span<UInt8>, version: BcryptVersion = .v2b
+        password: Span<UInt8>, cost: Int = 10, salt: Span<UInt8>, version: BcryptVariant = .v2b
     ) throws(BcryptError) -> [UInt8] {
         try [UInt8](capacity: Self.hashSpace) { output throws(BcryptError) in
             try hash(password: password, cost: cost, salt: salt, version: version, into: &output)
@@ -95,7 +95,7 @@ extension Bcrypt {
         password: Span<UInt8>,
         cost: Int = 10,
         salt: Span<UInt8>,
-        version: BcryptVersion = .v2b,
+        version: BcryptVariant = .v2b,
         into output: inout OutputSpan<UInt8>
     ) throws(BcryptError) {
         guard salt.count == Self.saltSpace else {

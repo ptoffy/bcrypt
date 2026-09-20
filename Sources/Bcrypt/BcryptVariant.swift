@@ -3,7 +3,7 @@
 /// All three variants compute the same hash from the same password and salt; they differ only in the
 /// prefix and in how over-long passwords are treated. `verify` accepts any of them and preserves the
 /// prefix, so a hash created with one variant round-trips unchanged.
-public enum BcryptVersion: Equatable, Sendable {
+public enum BcryptVariant: Equatable, Sendable {
     /// `$2a$`, the original 1999 revision.
     ///
     /// Passwords longer than 72 bytes are truncated rather than rejected, for compatibility with hashes
