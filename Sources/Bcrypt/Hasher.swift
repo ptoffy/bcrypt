@@ -12,6 +12,7 @@ extension Bcrypt {
     @usableFromInline static let saltSpace = 22
     @usableFromInline static let words = 6
     @usableFromInline static let hashSpace = 60
+    @usableFromInline static let maxPasswordLength = 72
 
     /// Hashes a password using the bcrypt algorithm.
     /// - Parameters:
@@ -124,7 +125,7 @@ extension Bcrypt {
         switch version {
         case .v2a: break
         case .v2b, .v2y:
-            guard key.count <= 72 else {
+            guard key.count <= Self.maxPasswordLength else {
                 throw BcryptError.passwordTooLong
             }
         }
@@ -180,9 +181,9 @@ extension Bcrypt {
 
         output.append(36)
 
-        for index in salt.indices {
-            output.append(salt[index])
-        }
+        // Re-encode the decoded salt rather than copying the input, so that a non-canonical final salt
+        // character (only its top two bits carry data) is normalised in the output, as OpenBSD does.
+        Base64.encode(cSalt.span, count: Self.maxSalt, into: &output)
 
         Base64.encode(cipherBytes.span, count: 4 * Self.words - 1, into: &output)
     }
