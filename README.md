@@ -37,12 +37,13 @@ func hash(
     into output: inout OutputSpan<UInt8>
 ) throws(BcryptError)
 ```
-API, compared to Vapor's C bcrypt ([vapor/authentication](https://github.com/vapor/authentication)), measured on an Apple M5 Pro with the [benchmark](https://github.com/ordo-one/benchmark) package.
+API, compared to Vapor's C bcrypt ([vapor/authentication](https://github.com/vapor/authentication)) and the Rust [bcrypt](https://crates.io/crates/bcrypt) crate, measured on an Apple M5 Pro. The Swift rows use the [benchmark](https://github.com/ordo-one/benchmark) package; the Rust row uses `bcrypt::hash` (the `String`-returning API) in a plain timing loop with a counting global allocator, `lto = true` and `codegen-units = 1` for release.
 
 | | Release ms | Debug ms | Allocations Release | Allocations Debug |
 |------|------------|----------|---------------------|-------------------|
-| vapor/authentication | 170ms | 270ms | 11 | 181 |
 | bcrypt | 149ms | 440ms | 0 | 0 |
+| vapor/authentication | 170ms | 270ms | 11 | 181 |
+| bcrypt (Rust 0.17) | 170ms | 650ms | 7 | 7 |
 
 ## Security Information
 
