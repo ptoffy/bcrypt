@@ -1,3 +1,7 @@
+// Ported from OpenBSD's bcrypt implementation (lib/libc/crypt/bcrypt.c).
+// Copyright (c) 2014 Ted Unangst <tedu@openbsd.org>, Copyright (c) 1997 Niels Provos <provos@umich.edu>.
+// Redistributed under the ISC license; the full notice is reproduced in LICENSE.
+
 @usableFromInline
 enum Base64Error: Error {
     case invalidCharacter
@@ -119,6 +123,10 @@ struct Base64 {
             }
 
             c4 = char64(of: s[off])
+            if c4 == UInt8.max {
+                throw .invalidCharacter
+            }
+
             off &+= 1
             o = (c3 & 0x03) &<< 6
             o |= c4

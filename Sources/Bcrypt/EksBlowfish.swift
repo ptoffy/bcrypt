@@ -1,8 +1,12 @@
+// Ported from OpenBSD's Blowfish implementation (lib/libc/crypt/blowfish.c, include/blf.h).
+// Copyright 1997 Niels Provos <provos@physnet.uni-hamburg.de>. All rights reserved.
+// Redistributed under the BSD-3-Clause license; the full notice is reproduced in LICENSE.
+
 /// EksBlowfish (Expensive key schedule Blowfish) is a block cipher based on Blowfish.
 ///
 /// This work is based on
 /// 1. Applied Cryptography, Second Edition by Bruce Schneier, section 14 and the corresponding code in Part V.
-/// 2. The OpenBSD implementation of bcrypt at https://github.com/openbsd/src/blob/master/lib/libc/crypt/bcrypt.c.
+/// 2. The OpenBSD implementation of Blowfish at https://github.com/openbsd/src/blob/master/lib/libc/crypt/blowfish.c.
 ///    The function names and variable names are kept the same as in the OpenBSD implementation.
 @usableFromInline enum EksBlowfish {
     @usableFromInline static let N = 16  // Cipher Rounds
@@ -21,7 +25,7 @@
 
         expandState(password: password, salt: salt, p: &pSpan, s: &sSpan)
 
-        var i = 1 &<< cost
+        var i: UInt32 = 1 &<< cost
 
         while i > 0 {
             expand0State(key: password, nulTerminated: true, p: &pSpan, s: &sSpan)

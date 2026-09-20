@@ -1,4 +1,4 @@
-public enum BcryptError: Error {
+@nonexhaustive public enum BcryptError: Error {
     case invalidSaltLength
     case invalidSalt
     case invalidHash

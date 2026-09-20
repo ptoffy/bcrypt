@@ -23,7 +23,7 @@ jobs:
     name: ${{ matrix.target }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    container: swiftlang/swift:nightly-6.4.x-noble
+    container: swift:6.4-noble
     strategy:
       fail-fast: false
       matrix:

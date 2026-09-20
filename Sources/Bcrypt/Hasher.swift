@@ -1,3 +1,7 @@
+// Ported from OpenBSD's bcrypt implementation (lib/libc/crypt/bcrypt.c).
+// Copyright (c) 2014 Ted Unangst <tedu@openbsd.org>, Copyright (c) 1997 Niels Provos <provos@umich.edu>.
+// Redistributed under the ISC license; the full notice is reproduced in LICENSE.
+
 extension Bcrypt {
     /// "OrpheanBeholderScryDoubt" as six big-endian words; the block that bcrypt encrypts 64 times with the derived key.
     @usableFromInline static let cipherText: InlineArray<6, UInt32> = [
@@ -119,7 +123,7 @@ extension Bcrypt {
 
         switch version {
         case .v2a: break
-        case .v2b:
+        case .v2b, .v2y:
             guard key.count <= 72 else {
                 throw BcryptError.passwordTooLong
             }
@@ -130,10 +134,13 @@ extension Bcrypt {
         }
 
         var (p, s) = EksBlowfish.setup(password: key, salt: cSalt.span, cost: cost)
-        // these aren't actually being mutated but having them as Span instead would require
-        // us to have two separate encipher methods
-        let pSpan = p.mutableSpan
-        let sSpan = s.mutableSpan
+        var pSpan = p.mutableSpan
+        var sSpan = s.mutableSpan
+
+        defer {
+            pSpan.zeroize()
+            sSpan.zeroize()
+        }
 
         var cData = Self.cipherText
 

@@ -1,3 +1,7 @@
+// Ported from OpenBSD's bcrypt implementation (lib/libc/crypt/bcrypt.c).
+// Copyright (c) 2014 Ted Unangst <tedu@openbsd.org>, Copyright (c) 1997 Niels Provos <provos@umich.edu>.
+// Redistributed under the ISC license; the full notice is reproduced in LICENSE.
+
 extension Bcrypt {
     /// Verifies a password against a hash.
     /// - Parameters:
@@ -47,6 +51,10 @@ extension Bcrypt {
             throw BcryptError.invalidCost
         }
         let cost = tens * 10 + ones
+
+        guard hash[6] == UInt8.separator else {
+            throw BcryptError.invalidHash
+        }
 
         let newHash = try InlineArray<60, UInt8> { outputSpan throws(BcryptError) in
             try Bcrypt.hash(password: password, cost: cost, salt: hash.extracting(7..<29), version: version, into: &outputSpan)
