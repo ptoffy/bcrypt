@@ -1,3 +1,7 @@
+// Ported from OpenBSD's Blowfish implementation (lib/libc/crypt/blowfish.c, include/blf.h).
+// Copyright 1997 Niels Provos <provos@physnet.uni-hamburg.de>. All rights reserved.
+// Redistributed under the BSD-3-Clause license; the full notice is reproduced in LICENSE.
+
 extension EksBlowfish {
     @usableFromInline
     @inline(__always)

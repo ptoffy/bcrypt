@@ -1,3 +1,7 @@
+// Ported from OpenBSD's bcrypt implementation (lib/libc/crypt/bcrypt.c).
+// Copyright (c) 2014 Ted Unangst <tedu@openbsd.org>, Copyright (c) 1997 Niels Provos <provos@umich.edu>.
+// Redistributed under the ISC license; the full notice is reproduced in LICENSE.
+
 extension Bcrypt {
     /// "OrpheanBeholderScryDoubt" as six big-endian words; the block that bcrypt encrypts 64 times with the derived key.
     @usableFromInline static let cipherText: InlineArray<6, UInt32> = [
@@ -8,6 +12,7 @@ extension Bcrypt {
     @usableFromInline static let saltSpace = 22
     @usableFromInline static let words = 6
     @usableFromInline static let hashSpace = 60
+    @usableFromInline static let maxPasswordLength = 72
 
     /// Hashes a password using the bcrypt algorithm.
     /// - Parameters:
@@ -119,8 +124,8 @@ extension Bcrypt {
 
         switch version {
         case .v2a: break
-        case .v2b:
-            guard key.count <= 72 else {
+        case .v2b, .v2y:
+            guard key.count <= Self.maxPasswordLength else {
                 throw BcryptError.passwordTooLong
             }
         }
@@ -130,10 +135,13 @@ extension Bcrypt {
         }
 
         var (p, s) = EksBlowfish.setup(password: key, salt: cSalt.span, cost: cost)
-        // these aren't actually being mutated but having them as Span instead would require
-        // us to have two separate encipher methods
-        let pSpan = p.mutableSpan
-        let sSpan = s.mutableSpan
+        var pSpan = p.mutableSpan
+        var sSpan = s.mutableSpan
+
+        defer {
+            pSpan.zeroize()
+            sSpan.zeroize()
+        }
 
         var cData = Self.cipherText
 
@@ -173,9 +181,9 @@ extension Bcrypt {
 
         output.append(36)
 
-        for index in salt.indices {
-            output.append(salt[index])
-        }
+        // Re-encode the decoded salt rather than copying the input, so that a non-canonical final salt
+        // character (only its top two bits carry data) is normalised in the output, as OpenBSD does.
+        Base64.encode(cSalt.span, count: Self.maxSalt, into: &output)
 
         Base64.encode(cipherBytes.span, count: 4 * Self.words - 1, into: &output)
     }

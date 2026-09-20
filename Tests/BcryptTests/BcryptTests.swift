@@ -123,6 +123,36 @@ struct BcryptTests {
         #expect(throws: BcryptError.invalidVersion) {
             try Bcrypt.verify(password: "test", against: "$2z$10$" + String(repeating: "A", count: 53))
         }
+
+        #expect(throws: BcryptError.invalidHash) {
+            try Bcrypt.verify(password: "test", against: "$2a$10x" + String(repeating: "A", count: 53))
+        }
+    }
+
+    @Test("Verify $2y$ hash")
+    func verify2y() throws {
+        let hash = "$2y$12$3cVe95jlT26PkfwkJ1Jl4uHBWGEFfdI3L95clNilo3p82rLvh6GwK"
+        #expect(try Bcrypt.verify(password: "test", against: hash))
+        #expect(try !Bcrypt.verify(password: "wrong", against: hash))
+        #expect(try Bcrypt.hash(password: "test", cost: 4, version: .v2y).hasPrefix("$2y$04$"))
+    }
+
+    @Test("Verify legacy hash of a password longer than 72 bytes")
+    func verifyLegacyLongPassword() throws {
+        let hash = "$2y$04$NpsZn6lJmcKCKlJWJMvLuuH/volE4xvrPM5Z0uMURrn3kPAgNiLvG"
+        #expect(try Bcrypt.verify(password: String(repeating: "a", count: 73), against: hash))
+        #expect(try Bcrypt.verify(password: String(repeating: "a", count: 72), against: hash))
+        #expect(try !Bcrypt.verify(password: String(repeating: "a", count: 71), against: hash))
+    }
+
+    @Test("Non-canonical salt is normalised in the output")
+    func nonCanonicalSalt() throws {
+        let canonical = "abcdefghijklmnopqrstue"  // 'e' = 0b100000
+        let nonCanonical = "abcdefghijklmnopqrstuf"  // 'f' = 0b100001
+        let h1 = try Bcrypt.hash(password: Array("x".utf8), cost: 4, salt: Array(canonical.utf8))
+        let h2 = try Bcrypt.hash(password: Array("x".utf8), cost: 4, salt: Array(nonCanonical.utf8))
+        #expect(h1 == h2)
+        #expect(String(decoding: h1, as: UTF8.self).hasPrefix("$2b$04$" + canonical))
     }
 
     @Test("Property: Any valid password should hash and verify", arguments: 1...100)
