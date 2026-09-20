@@ -41,7 +41,7 @@ extension Bcrypt {
             throw BcryptError.invalidHash
         }
 
-        guard let version = BcryptVersion(identifier: hash.extracting(0...3)) else {
+        guard let version = BcryptVariant(identifier: hash.extracting(0...3)) else {
             throw BcryptError.invalidVersion
         }
 

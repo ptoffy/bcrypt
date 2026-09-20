@@ -10,7 +10,7 @@
     case emptyPassword
     /// The cost is outside the range 4...31, or the two cost digits in a hash are not decimal digits.
     case invalidCost
-    /// The password is longer than 72 bytes and the version is ``BcryptVersion/v2b`` or ``BcryptVersion/v2y``.
+    /// The password is longer than 72 bytes and the version is ``BcryptVariant/v2b`` or ``BcryptVariant/v2y``.
     ///
     /// Only thrown when creating a hash; `verify` truncates instead, see ``Bcrypt``.
     case passwordTooLong

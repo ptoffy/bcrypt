@@ -1,51 +1,8 @@
-# Bcrypt
+# Security Considerations
 
-A native, dependency and Foundation free Swift implementation of the bcrypt password hashing algorithm, based on the [OpenBSD implementation](https://github.com/openbsd/src/blob/master/lib/libc/crypt/bcrypt.c).
+How this implementation handles versions, cost, randomness and memory.
 
-## Installation
-
-```swift
-.package(url: "https://github.com/ptoffy/bcrypt.git", branch: "0.4.0")
-```
-
-```swift
-.product(name: "Bcrypt", package: "bcrypt")
-```
-
-## Usage
-
-```swift
-import Bcrypt
-
-let password = "password"
-let hash = try Bcrypt.hash(password: password)
-let isValid = try Bcrypt.verify(password: password, against: hash)
-```
-
-> [!NOTE]
-> Hashing passwords longer than 72 characters will result in a `.passwordTooLong` error, whereas verifying them will result in the excess characters being ignored.
-
-## Performance
-
-Benchmarks for hashing the password "password" at cost factor 12 using the 
-```swift
-func hash(
-    password: Span<UInt8>,
-    cost: Int = 10,
-    salt: Span<UInt8>,
-    version: BcryptVariant = .v2b,
-    into output: inout OutputSpan<UInt8>
-) throws(BcryptError)
-```
-API, compared to Vapor's C bcrypt ([vapor/authentication](https://github.com/vapor/authentication)) and the Rust [bcrypt](https://crates.io/crates/bcrypt) crate, measured on an Apple M5 Pro. The Swift rows use the [benchmark](https://github.com/ordo-one/benchmark) package; the Rust row uses `bcrypt::hash` (the `String`-returning API) in a plain timing loop with a counting global allocator, `lto = true` and `codegen-units = 1` for release.
-
-| | Release ms | Debug ms | Allocations Release | Allocations Debug |
-|------|------------|----------|---------------------|-------------------|
-| bcrypt | 149ms | 440ms | 0 | 0 |
-| vapor/authentication | 170ms | 270ms | 11 | 181 |
-| bcrypt (Rust 0.17) | 170ms | 650ms | 7 | 7 |
-
-## Security Information
+## Overview
 
 ### Versions
 
