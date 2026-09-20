@@ -24,10 +24,10 @@ jobs:
       enable_embedded_wasm_sdk_build: true
       enable_android_sdk_build: true
       android_sdk_versions: '["6.4"]'
-      enable_macos_checks: true
-      macos_xcode_versions: '["swift_6.4"]'
-      enable_ios_checks: true
-      ios_host_xcode_versions: '["swift_6.4"]'
+      # enable_macos_checks: true
+      # macos_xcode_versions: '["swift_6.4"]'
+      # enable_ios_checks: true
+      # ios_host_xcode_versions: '["swift_6.4"]'
       enable_windows_checks: true
       windows_swift_versions: '["nightly-6.4.x"]'
 
@@ -38,9 +38,6 @@ jobs:
     steps:
       - name: Install Swift
         run: |
-          # The reusable workflow's macOS jobs need swiftlang's self-hosted runners, Xcode 26.6 on
-          # macos-26 ships Swift 6.3, and swift-actions/setup-swift has no 6.4 entry yet, so drive
-          # swiftly directly: https://www.swift.org/install/macos/
           curl -sSL https://download.swift.org/swiftly/darwin/swiftly.pkg -o "${RUNNER_TEMP}/swiftly.pkg"
           installer -pkg "${RUNNER_TEMP}/swiftly.pkg" -target CurrentUserHomeDirectory
           ~/.swiftly/bin/swiftly init --assume-yes --skip-install --no-modify-profile --quiet-shell-followup
@@ -51,7 +48,7 @@ jobs:
           echo "${SWIFTLY_BIN_DIR}" >> "${GITHUB_PATH}"
           swift --version
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Build
         run: swift build
       - name: Test
