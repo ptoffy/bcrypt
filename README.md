@@ -1,11 +1,14 @@
 # Bcrypt
 
+[![Swift 6.4](https://img.shields.io/badge/Swift-6.4-F05138?logo=swift&logoColor=white)](https://www.swift.org)
+[![Documentation](https://img.shields.io/badge/docs-DocC-blue)](https://swiftpackageindex.com/ptoffy/bcrypt/documentation/bcrypt)
+
 A native, dependency and Foundation free Swift implementation of the bcrypt password hashing algorithm, based on the [OpenBSD implementation](https://github.com/openbsd/src/blob/master/lib/libc/crypt/bcrypt.c).
 
 ## Installation
 
 ```swift
-.package(url: "https://github.com/ptoffy/bcrypt.git", branch: "0.4.0")
+.package(url: "https://github.com/ptoffy/bcrypt.git", from: "0.4.0")
 ```
 
 ```swift
