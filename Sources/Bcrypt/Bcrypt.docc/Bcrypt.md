@@ -35,6 +35,18 @@ hash, you can raise the default for new passwords at any time and old hashes kee
 Both functions have `String`, `[UInt8]` and `Span<UInt8>` overloads. The `Span` overloads and
 ``Bcrypt/Bcrypt/hash(password:cost:salt:version:into:)`` do not allocate.
 
+### Settings strings
+
+``Bcrypt/Bcrypt/hash(password:settings:)-(String,_)`` is the `crypt(3)`-style interface: instead of separate `cost`,
+`salt` and `version` arguments it takes a *settings* string, the `$2x$NN$` prefix plus the 22-character salt, which is
+exactly the first 29 characters of a hash. Passing the prefix of an existing hash recomputes that hash.
+
+```swift
+let stored = "$2b$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW"
+let settings = String(stored.prefix(29))
+let recomputed = try Bcrypt.hash(password: "password", settings: settings)
+```
+
 ### Errors
 
 Every failure is a ``BcryptError`` describing a problem with the input. A password that simply does not match is not

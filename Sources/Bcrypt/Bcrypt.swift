@@ -3,7 +3,8 @@
 /// Use ``hash(password:cost:version:)-(String,_,_)`` to hash a new password with a random salt, and
 /// ``verify(password:against:)-(String,_)`` to check a password against a stored hash. Both have overloads
 /// for `[UInt8]` and `Span<UInt8>`; the `Span` overloads and ``hash(password:cost:salt:version:into:)`` do not
-/// allocate.
+/// allocate. ``hash(password:settings:)-(String,_)`` takes the version, cost and salt from a `crypt(3)`-style
+/// settings string, the first 29 characters of a hash.
 ///
 /// ```swift
 /// let hash = try Bcrypt.hash(password: "correct horse battery staple", cost: 12)

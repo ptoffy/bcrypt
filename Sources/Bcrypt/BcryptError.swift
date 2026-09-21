@@ -6,6 +6,9 @@
     case invalidSalt
     /// The hash passed to `verify` is not 60 characters long or does not have the `$2x$nn$` prefix layout.
     case invalidHash
+    /// The settings passed to `hash(password:settings:)` are not 29 characters long or do not have the `$2x$nn$`
+    /// prefix layout.
+    case invalidSettings
     /// The password is empty.
     case emptyPassword
     /// The cost is outside the range 4...31, or the two cost digits in a hash are not decimal digits.
@@ -14,6 +17,7 @@
     ///
     /// Only thrown when creating a hash; `verify` truncates instead, see ``Bcrypt``.
     case passwordTooLong
-    /// The hash passed to `verify` starts with a version prefix other than `$2a$`, `$2b$` or `$2y$`.
+    /// The hash passed to `verify`, or the settings passed to `hash(password:settings:)`, start with a version prefix
+    /// other than `$2a$`, `$2b$` or `$2y$`.
     case invalidVersion
 }
