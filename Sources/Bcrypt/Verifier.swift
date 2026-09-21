@@ -33,24 +33,11 @@ extension Bcrypt {
     /// - Returns: `true` if the password matches the hash, `false` otherwise.
     @inlinable
     public static func verify(password: Span<UInt8>, against hash: Span<UInt8>) throws(BcryptError) -> Bool {
-        // $2a$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW
-        // \__/\/ \____________________/\_____________________________/
-        // Alg Cost      Salt                        Hash
-
         guard hash.count == Bcrypt.hashSpace else {
             throw BcryptError.invalidHash
         }
 
-        guard let version = BcryptVariant(identifier: hash.extracting(0...3)) else {
-            throw BcryptError.invalidVersion
-        }
-
-        let tens = Int(hash[4]) - 48
-        let ones = Int(hash[5]) - 48
-        guard (0...9).contains(tens) && (0...9).contains(ones) else {
-            throw BcryptError.invalidCost
-        }
-        let cost = tens * 10 + ones
+        let (version, cost) = try parseVersionAndCost(hash)
 
         guard hash[6] == UInt8.separator else {
             throw BcryptError.invalidHash
@@ -59,7 +46,7 @@ extension Bcrypt {
         let key = password.count > Bcrypt.maxPasswordLength ? password.extracting(..<Bcrypt.maxPasswordLength) : password
 
         let newHash = try InlineArray<60, UInt8> { outputSpan throws(BcryptError) in
-            try Bcrypt.hash(password: key, cost: cost, salt: hash.extracting(7..<29), version: version, into: &outputSpan)
+            try Bcrypt.hash(password: key, cost: cost, salt: hash.extracting(7..<Bcrypt.settingsSpace), version: version, into: &outputSpan)
         }
 
         return constantTimeEquals(newHash.span, hash)

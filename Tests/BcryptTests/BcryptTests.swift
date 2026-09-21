@@ -15,6 +15,68 @@ struct BcryptTests {
         )
     }
 
+    @Test("Test Vectors via settings string", arguments: TestVector.all)
+    func testVectorsHashingWithSettings(testVector: TestVector) throws {
+        let settings = Array(testVector.expectedHash.utf8.prefix(29))
+        let hash = try Bcrypt.hash(password: Array(testVector.password.utf8).span, settings: settings.span)
+
+        #expect(
+            hash == Array(testVector.expectedHash.utf8),
+            "Expected: \(testVector.expectedHash), got: \(String(decoding: hash, as: UTF8.self))"
+        )
+    }
+
+    @Test("Settings string round trip")
+    func settingsRoundTrip() throws {
+        let hash = try Bcrypt.hash(password: "password", cost: 4, version: .v2y)
+        let settings = String(hash.prefix(29))
+
+        #expect(try Bcrypt.hash(password: "password", settings: settings) == hash)
+        #expect(try Bcrypt.hash(password: "wrong", settings: settings) != hash)
+    }
+
+    @Test("Settings string into OutputSpan")
+    func settingsIntoOutputSpan() throws {
+        let expected = "$2y$12$3cVe95jlT26PkfwkJ1Jl4uHBWGEFfdI3L95clNilo3p82rLvh6GwK"
+        let settings = Array(expected.utf8.prefix(29))
+        let hash = try InlineArray<60, UInt8> { output throws(BcryptError) in
+            try Bcrypt.hash(password: Array("test".utf8).span, settings: settings.span, into: &output)
+        }
+
+        var bytes: [UInt8] = []
+        for i in hash.indices {
+            bytes.append(hash[i])
+        }
+        #expect(bytes == Array(expected.utf8))
+    }
+
+    @Test("Malformed settings")
+    func malformedSettings() throws {
+        let salt = String(repeating: "A", count: 22)
+
+        for settings in ["$2a$10$", "$2a$10$" + salt + "A", "$2a$10$" + salt + salt + "AAAAAAA"] {
+            #expect(throws: BcryptError.invalidSettings) {
+                try Bcrypt.hash(password: "test", settings: settings)
+            }
+        }
+
+        #expect(throws: BcryptError.invalidSettings) {
+            try Bcrypt.hash(password: "test", settings: "$2a$10x" + salt)
+        }
+
+        #expect(throws: BcryptError.invalidVersion) {
+            try Bcrypt.hash(password: "test", settings: "$2z$10$" + salt)
+        }
+
+        #expect(throws: BcryptError.invalidCost) {
+            try Bcrypt.hash(password: "test", settings: "$2a$99$" + salt)
+        }
+
+        #expect(throws: BcryptError.invalidSalt) {
+            try Bcrypt.hash(password: "test", settings: "$2a$10$" + String(repeating: "!", count: 22))
+        }
+    }
+
     @Test("End to end")
     func endToEnd() throws {
         let password = "password"
